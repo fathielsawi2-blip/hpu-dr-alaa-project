@@ -280,7 +280,7 @@ def get_cv_context():
 # ============================================================
 
 def get_openai_client():
-    key = st.secrets.get("OPENAI_API_KEY", "")
+    key = st.secrets.get("key_ZogttToTgjc3Ynoh", "")
     if not key:
         return None
     return OpenAI(api_key=key)
