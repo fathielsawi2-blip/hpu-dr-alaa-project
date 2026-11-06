@@ -258,6 +258,33 @@ def initialize_database():
 
 initialize_database()
 
+def get_table(table_name):
+    allowed_tables = {
+        "experiences",
+        "content",
+        "performance",
+        "interviews",
+        "source_materials",
+        "generated_assets",
+        "cv_knowledge",
+        "analysis_records"
+    }
+
+    if table_name not in allowed_tables:
+        raise ValueError("Invalid database table")
+
+    conn = get_db()
+
+    try:
+        df = pd.read_sql_query(
+            f"SELECT * FROM {table_name}",
+            conn
+        )
+    finally:
+        conn.close()
+
+    return df
+
 def read_table(table):
     allowed = ["experiences", "content", "performance", "interviews",
                "cv_knowledge", "source_materials", "generated_assets"]
