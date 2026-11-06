@@ -954,21 +954,19 @@ st.caption("HPU | Human Processing Unit | Dr. Alaa Zahran | Content Intelligence
 # 9. OPTIONAL AI CONFIGURATION
 # ------------------------------------------------------------
 
-def get_openai_kst.secrets.get("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():
+def get_openai_key():
     """
     OpenAI is optional.
     HPU Core continues working if the key is missing.
     """
-
     try:
-        key = ", "")
+        key = st.secrets.get("OPENAI_API_KEY", "")
         if key:
             return key
     except Exception:
         pass
 
-    return os.environ.get("OPENAI_API_KEY", "")
-
+    return os.getenv("OPENAI_API_KEY", "")
 
 def openai_request(endpoint, payload, timeout=120):
     """
