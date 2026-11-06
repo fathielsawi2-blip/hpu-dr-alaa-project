@@ -319,22 +319,25 @@ def get_openai_key():
     except Exception:
         return os.getenv("OPENAI_API_KEY", "")
 
+
 def generate_text_with_ai(client, prompt):
     response = client.responses.create(
         model=TEXT_MODEL,
         instructions=(
-            "You are HPU, a rigorous personal-brand intelligence and content "
-            "strategist for Dr. Alaa Zahran. Use the CV knowledge as verified "
-            "reference material, not as permission to invent facts. Clearly "
-            "separate verified CV facts, facts from the supplied source, and "
-            "your strategic interpretation. Never invent metrics, clients, dates, "
-            "roles, quotations, or outcomes. If evidence is missing, flag it. "
-            "Write polished, credible professional content. Avoid exaggerated "
-            "self-promotion and generic AI language."
+            "You are HPU, a rigorous personal-brand intelligence "
+            "and content strategist for Dr. Alaa Zahran. "
+            "Use CV knowledge as reference material, but never "
+            "invent facts, achievements, statistics or experience. "
+            "Clearly distinguish verified CV facts, facts from "
+            "the supplied source, and your strategic interpretation. "
+            "Preserve the original meaning of the source material. "
+            "Provide practical, evidence-conscious recommendations."
         ),
         input=prompt
     )
+
     return response.output_text
+
 
 def make_image(client, prompt):
     result = client.images.generate(
