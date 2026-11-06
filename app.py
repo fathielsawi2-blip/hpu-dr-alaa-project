@@ -908,3 +908,2357 @@ elif page == "Performance":
 
 st.markdown("---")
 st.caption("HPU | Human Processing Unit | Dr. Alaa Zahran | Content Intelligence Platform")
+# ============================================================
+# SECTION 2 — HPU CONTENT INTELLIGENCE & GENERATION ENGINE
+# Add below Section 1
+# ============================================================
+
+# ------------------------------------------------------------
+# 9. OPTIONAL AI CONFIGURATION
+# ------------------------------------------------------------
+
+def get_openai_key():
+    """
+    OpenAI is optional.
+    HPU Core continues working if the key is missing.
+    """
+
+    try:
+        key = st.secrets.get("OPENAI_API_KEY", "")
+        if key:
+            return key
+    except Exception:
+        pass
+
+    return os.environ.get("OPENAI_API_KEY", "")
+
+
+def openai_request(endpoint, payload, timeout=120):
+    """
+    Send a request to OpenAI.
+    Returns the response as JSON.
+    """
+
+    api_key = get_openai_key()
+
+    if not api_key:
+        raise RuntimeError(
+            "OpenAI API key is not configured. "
+            "HPU Core is still available."
+        )
+
+    url = "https://api.openai.com/v1/" + endpoint
+
+    data = json.dumps(payload).encode("utf-8")
+
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    except urllib.error.HTTPError as error:
+        details = error.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"OpenAI request failed ({error.code}): {details[:1000]}"
+        )
+
+    except urllib.error.URLError as error:
+        raise RuntimeError(
+            f"Could not connect to OpenAI: {error.reason}"
+        )
+
+
+def openai_binary_request(endpoint, payload, timeout=180):
+    """
+    Send an OpenAI request that returns binary data,
+    such as generated audio.
+    """
+
+    api_key = get_openai_key()
+
+    if not api_key:
+        raise RuntimeError("OpenAI API key is missing.")
+
+    url = "https://api.openai.com/v1/" + endpoint
+
+    data = json.dumps(payload).encode("utf-8")
+
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.read()
+
+    except urllib.error.HTTPError as error:
+        details = error.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"OpenAI binary request failed ({error.code}): "
+            f"{details[:1000]}"
+        )
+
+
+# ------------------------------------------------------------
+# 10. CONTENT STRATEGY ENGINE
+# ------------------------------------------------------------
+
+def select_content_angle(analysis, objective):
+    """
+    Select a content angle using HPU Core rules.
+    """
+
+    themes = analysis.get("themes", [])
+    signals = analysis.get("signals", {})
+
+    if (
+        signals.get("Outputs")
+        and not signals.get("Outcomes")
+    ):
+        return "Outputs versus outcomes"
+
+    if (
+        "KPIs and Impact Measurement" in themes
+        or not signals.get("Baseline")
+    ):
+        return "Measurement and performance"
+
+    if "Change Management" in themes:
+        return "Communication during transformation"
+
+    if "Reputation and Brand Strategy" in themes:
+        return "Trust and reputation"
+
+    if "Strategic Communication" in themes:
+        return "Strategic communication practice"
+
+    if objective == "Thought leadership":
+        return "Executive perspective and professional insight"
+
+    if objective == "Professional awareness":
+        return "Professional education and awareness"
+
+    return "Practical communication insight"
+
+
+def generate_content_strategy(source, analysis, audience, objective):
+    """
+    Produce a content strategy independently of OpenAI.
+    """
+
+    angle = select_content_angle(analysis, objective)
+    recommendations = recommend_strategy(analysis)
+
+    strategy = {
+        "central_idea": source,
+        "content_angle": angle,
+        "audience": audience,
+        "objective": objective,
+        "expertise": analysis.get("themes", []),
+        "recommendations": recommendations,
+        "suggested_formats": [
+            "LinkedIn thought-leadership post",
+            "Professional article",
+            "Educational infographic",
+            "Short video narration",
+            "Audio commentary"
+        ],
+        "suggested_sequence": [
+            "Introduce the central issue",
+            "Explain why it matters",
+            "Identify the professional challenge",
+            "Present a strategic perspective",
+            "Provide a practical recommendation"
+        ]
+    }
+
+    return strategy
+
+
+# ------------------------------------------------------------
+# 11. LOCAL TEXT GENERATION — LINKEDIN POST
+# ------------------------------------------------------------
+
+def generate_local_post(
+    source,
+    audience,
+    language,
+    tone,
+    objective,
+    analysis
+):
+    """
+    Generate a post using HPU Core templates.
+    The original source remains the central idea.
+    """
+
+    angle = select_content_angle(analysis, objective)
+
+    if language == "Arabic":
+
+        post = f"""{source}
+
+في الممارسة المهنية، لا يكفي أن ننفذ الأنشطة الاتصالية
+أو نزيد من حجم المحتوى المنشور.
+
+الأهم هو أن نفهم المشكلة التي نحاول معالجتها،
+والهدف الذي نسعى إلى تحقيقه، والتغيير الذي نريد أن نراه.
+
+من هنا تظهر أهمية التفكير الاتصالي الاستراتيجي:
+أن نربط كل نشاط اتصالي بهدف واضح،
+وأن نحدد نقطة البداية قبل تقييم الأداء،
+وأن نختار مؤشرات تعكس النتائج لا مجرد حجم النشاط.
+
+**التواصل الفعّال ليس مجرد نشاط يُنفذ،
+بل عملية هادفة يمكن قياس أثرها.**
+
+زاوية المعالجة: {angle}
+
+الجمهور المستهدف: {audience}
+
+الهدف: {objective}
+
+#التواصل_الاستراتيجي
+#الاتصال_المؤسسي
+#قياس_الأثر
+"""
+
+    else:
+
+        post = f"""{source}
+
+In professional practice, communication success cannot
+be determined simply by the volume of activities
+or the amount of content published.
+
+The more important questions are:
+
+What problem are we addressing?
+What objective are we pursuing?
+What change do we want to achieve?
+
+Strategic communication connects every activity
+to a clear purpose, establishes a starting point
+and selects indicators that reflect actual results.
+
+**Effective communication is not simply an activity.
+It is a purposeful process whose impact can be assessed.**
+
+Content angle: {angle}
+
+Target audience: {audience}
+
+Objective: {objective}
+
+#StrategicCommunication
+#CorporateCommunication
+#ImpactMeasurement
+"""
+
+    return post
+
+
+# ------------------------------------------------------------
+# 12. LOCAL TEXT GENERATION — PROFESSIONAL ARTICLE
+# ------------------------------------------------------------
+
+def generate_local_article(
+    source,
+    audience,
+    language,
+    objective,
+    analysis
+):
+
+    angle = select_content_angle(analysis, objective)
+
+    if language == "Arabic":
+
+        article = f"""# {source}
+
+## مقدمة
+
+يمثل هذا المفهوم مدخلاً مهماً لفهم التحديات التي تواجه
+ممارسات التواصل المؤسسي والاستراتيجي.
+
+فكثيراً ما تنشغل المؤسسات بتنفيذ الأنشطة،
+دون أن تربطها بصورة واضحة بالهدف المطلوب تحقيقه.
+
+## أولاً: فهم المشكلة
+
+تبدأ المشكلة عندما يصبح التركيز على المخرجات
+أكبر من التركيز على القيمة التي يفترض أن تحققها.
+
+عدد المنشورات أو حجم التغطية لا يوضح وحده
+مدى نجاح التواصل في إحداث تغيير.
+
+## ثانياً: أهمية الهدف
+
+يحتاج كل نشاط اتصالي إلى هدف واضح يحدد
+ما الذي تريد المؤسسة تحقيقه ولماذا.
+
+## ثالثاً: خط الأساس والقياس
+
+لا يمكن تقييم التغيير بصورة دقيقة دون معرفة
+الوضع الذي بدأت منه المؤسسة.
+
+ومن هنا تأتي أهمية خط الأساس ومؤشرات الأداء
+المناسبة لطبيعة الهدف.
+
+## رابعاً: من النشاط إلى الأثر
+
+يجب أن تتجاوز عملية التقييم عدّ الأنشطة
+إلى فهم النتائج والتغيرات التي تحققت.
+
+## خاتمة
+
+إن تطوير ممارسات التواصل يبدأ من الانتقال
+من تنفيذ الأنشطة إلى إدارة عملية اتصالية
+مرتبطة بهدف ومؤشرات ونتائج واضحة.
+
+زاوية المعالجة: {angle}
+
+الجمهور: {audience}
+
+الهدف الاتصالي: {objective}
+"""
+
+    else:
+
+        article = f"""# {source}
+
+## Introduction
+
+This concept provides an important starting point
+for understanding the challenges facing strategic
+and corporate communication practice.
+
+Organizations can become focused on activities
+without clearly connecting those activities
+to the results they are expected to achieve.
+
+## 1. Understanding the Problem
+
+The challenge begins when outputs receive
+more attention than the value they are meant to create.
+
+The number of posts or the volume of media coverage
+cannot independently demonstrate communication success.
+
+## 2. The Importance of Objectives
+
+Every communication activity should have a clear purpose.
+An objective explains what the organization wants
+to achieve and why.
+
+## 3. Baselines and Measurement
+
+Performance assessment requires an understanding
+of the starting position.
+
+Baselines and appropriate indicators help
+organizations assess whether meaningful change occurred.
+
+## 4. Moving from Activity to Impact
+
+Evaluation should go beyond counting activities.
+It should examine the outcomes and changes achieved.
+
+## Conclusion
+
+Better communication practice begins by connecting
+activities with clear objectives, relevant indicators
+and demonstrable outcomes.
+
+Content angle: {angle}
+
+Audience: {audience}
+
+Objective: {objective}
+"""
+
+    return article
+
+
+# ------------------------------------------------------------
+# 13. LOCAL VISUAL CONTENT BRIEF
+# ------------------------------------------------------------
+
+def generate_visual_brief(
+    source,
+    audience,
+    language,
+    analysis
+):
+
+    angle = select_content_angle(
+        analysis,
+        "Professional awareness"
+    )
+
+    if language == "Arabic":
+
+        return f"""التصور البصري المقترح
+
+الفكرة الرئيسية:
+{source}
+
+العنوان المقترح:
+من النشاط الاتصالي إلى الأثر القابل للقياس
+
+المحور:
+{angle}
+
+الجمهور:
+{audience}
+
+مكونات التصميم:
+
+1. المشكلة:
+   أنشطة ومخرجات اتصالية دون هدف واضح.
+
+2. التحدي:
+   غياب خط الأساس وصعوبة تقييم الأداء.
+
+3. الحل:
+   تحديد الهدف، وتوثيق خط الأساس،
+   واختيار مؤشرات الأداء.
+
+4. النتيجة:
+   تواصل أكثر وضوحاً وقابلية للتقييم.
+
+التوجه البصري:
+تصميم مؤسسي احترافي، مخطط تحليلي،
+عناصر قياس ومؤشرات أداء،
+وتسلسل بصري واضح من المشكلة إلى الحل.
+
+ملاحظة:
+هذا تصور تصميمي مولد بواسطة HPU Core،
+وليس صورة فعلية.
+"""
+
+    return f"""VISUAL CONTENT BRIEF
+
+Main idea:
+{source}
+
+Suggested headline:
+From Communication Activity to Measurable Impact
+
+Content angle:
+{angle}
+
+Target audience:
+{audience}
+
+Suggested layout:
+
+1. Problem:
+   Communication activities without clear objectives.
+
+2. Challenge:
+   Missing baselines and unclear performance evaluation.
+
+3. Solution:
+   Define objectives, establish baselines
+   and select relevant KPIs.
+
+4. Intended result:
+   More purposeful and measurable communication.
+
+Visual direction:
+Professional corporate infographic,
+analytical diagrams, KPI elements,
+clear information hierarchy.
+
+Note:
+This is an HPU Core design brief,
+not an actual generated image.
+"""
+
+
+# ------------------------------------------------------------
+# 14. LOCAL AUDIO NARRATION SCRIPT
+# ------------------------------------------------------------
+
+def generate_audio_script(source, language, audience):
+
+    if language == "Arabic":
+
+        return f"""النص المقترح للتعليق الصوتي
+
+{source}
+
+في كثير من المؤسسات، يتم التركيز على الأنشطة
+الاتصالية وما يتم إنتاجه ونشره.
+
+لكن السؤال الأهم هو:
+ما الهدف الذي نريد تحقيقه؟
+
+وكيف يمكننا معرفة ما إذا كنا قد حققناه؟
+
+التواصل الاستراتيجي يبدأ من فهم المشكلة،
+وتحديد الهدف، ومعرفة نقطة البداية.
+
+بعد ذلك نختار مؤشرات تساعدنا على قياس
+النتائج والتغير الذي تحقق.
+
+فالتواصل ليس مجرد نشر للمعلومات،
+بل عملية استراتيجية تهدف إلى تحقيق أثر واضح.
+
+الجمهور المستهدف: {audience}
+"""
+
+    return f"""SUGGESTED AUDIO NARRATION
+
+{source}
+
+Many organizations focus on communication activities
+and the amount of content they produce and publish.
+
+But the more important question is:
+
+What are we trying to achieve?
+
+And how will we know whether we achieved it?
+
+Strategic communication begins by understanding
+the problem, defining the objective
+and identifying the starting point.
+
+We then select indicators that help us measure
+the results and the change achieved.
+
+Communication is not simply the distribution
+of information. It is a strategic process
+designed to create meaningful impact.
+
+Target audience: {audience}
+"""
+
+
+# ------------------------------------------------------------
+# 15. OPTIONAL OPENAI TEXT ENHANCEMENT
+# ------------------------------------------------------------
+
+def enhance_text_with_openai(
+    source,
+    local_draft,
+    audience,
+    objective,
+    language,
+    content_type
+):
+    """
+    OpenAI improves the HPU Core draft.
+    It does not replace the independent analysis.
+    """
+
+    prompt = f"""
+You are the optional writing enhancement layer
+of HPU — Human Processing Unit.
+
+HPU Core has already analyzed the source material.
+Your job is to improve the writing, structure
+and clarity of the supplied draft.
+
+CONTENT TYPE:
+{content_type}
+
+LANGUAGE:
+{language}
+
+AUDIENCE:
+{audience}
+
+COMMUNICATION OBJECTIVE:
+{objective}
+
+ORIGINAL SOURCE:
+{source}
+
+HPU CORE DRAFT:
+{local_draft}
+
+RULES:
+- Preserve the original central idea.
+- Do not invent statistics, projects, roles or achievements.
+- Do not fabricate personal experiences.
+- Do not create unsupported CV claims.
+- Maintain a professional executive tone.
+- Improve clarity, structure and argument.
+- Return only the finished content.
+"""
+
+    result = openai_request(
+        "responses",
+        {
+            "model": AI_TEXT_MODEL,
+            "input": prompt
+        }
+    )
+
+    output = []
+
+    for item in result.get("output", []):
+        for content in item.get("content", []):
+            if content.get("type") == "output_text":
+                output.append(content.get("text", ""))
+
+    if not output:
+        raise RuntimeError(
+            "The AI response did not contain usable text."
+        )
+
+    return "\n".join(output)
+
+
+# ------------------------------------------------------------
+# 16. OPTIONAL ACTUAL IMAGE GENERATION
+# ------------------------------------------------------------
+
+def generate_actual_image(
+    source,
+    visual_brief,
+    language,
+    size="1024x1024"
+):
+    """
+    Generate an actual image using OpenAI.
+    This feature requires an API key and available credits.
+    """
+
+    image_prompt = f"""
+Create a professional corporate communication infographic.
+
+Original source:
+{source}
+
+Design brief:
+{visual_brief}
+
+Language of visible text: {language}
+
+Requirements:
+- Professional executive visual identity.
+- Clean and modern information hierarchy.
+- Clear diagrams and visual structure.
+- No invented statistics or numerical claims.
+- Avoid unnecessary decorative elements.
+- Make the main message easy to understand.
+"""
+
+    result = openai_request(
+        "images/generations",
+        {
+            "model": AI_IMAGE_MODEL,
+            "prompt": image_prompt,
+            "size": size,
+            "quality": "medium",
+            "n": 1
+        },
+        timeout=240
+    )
+
+    image_data = result["data"][0].get("b64_json")
+
+    if not image_data:
+        raise RuntimeError(
+            "The image service did not return image data."
+        )
+
+    return base64.b64decode(image_data)
+
+
+# ------------------------------------------------------------
+# 17. OPTIONAL ACTUAL AUDIO GENERATION
+# ------------------------------------------------------------
+
+def generate_actual_audio(
+    narration,
+    voice="alloy"
+):
+    """
+    Generate actual speech audio using OpenAI.
+    Returns MP3 bytes.
+    """
+
+    if len(narration) > 4000:
+        raise ValueError(
+            "The narration is too long for this single request. "
+            "Shorten it or split it into sections."
+        )
+
+    audio_data = openai_binary_request(
+        "audio/speech",
+        {
+            "model": AI_AUDIO_MODEL,
+            "voice": voice,
+            "input": narration,
+            "response_format": "mp3"
+        },
+        timeout=240
+    )
+
+    if not audio_data:
+        raise RuntimeError(
+            "The audio service returned an empty file."
+        )
+
+    return audio_data
+
+
+# ------------------------------------------------------------
+# 18. CONTENT FORMAT ROUTER
+# ------------------------------------------------------------
+
+def generate_local_asset(
+    asset_type,
+    source,
+    audience,
+    language,
+    tone,
+    objective,
+    analysis
+):
+    """
+    One central function routes requests to
+    the independent HPU content generators.
+    """
+
+    if asset_type == "LinkedIn Post":
+        return generate_local_post(
+            source,
+            audience,
+            language,
+            tone,
+            objective,
+            analysis
+        )
+
+    elif asset_type == "Professional Article":
+        return generate_local_article(
+            source,
+            audience,
+            language,
+            objective,
+            analysis
+        )
+
+    elif asset_type == "Visual Brief":
+        return generate_visual_brief(
+            source,
+            audience,
+            language,
+            analysis
+        )
+
+    elif asset_type == "Audio Script":
+        return generate_audio_script(
+            source,
+            language,
+            audience
+        )
+
+    elif asset_type == "Content Strategy":
+        strategy = generate_content_strategy(
+            source,
+            analysis,
+            audience,
+            objective
+        )
+
+        return json.dumps(
+            strategy,
+            ensure_ascii=False,
+            indent=4
+        )
+
+    else:
+        raise ValueError(
+            f"Unsupported content type: {asset_type}"
+        )
+
+
+# ------------------------------------------------------------
+# END OF SECTION 2
+# ------------------------------------------------------------
+# ============================================================
+# SECTION 3 OF 4
+# HPU APPLICATION PAGES
+# Independent local analysis, content studio and data interface
+# ============================================================
+
+# ------------------------------------------------------------
+# 1. GENERAL INTERFACE HELPERS
+# ------------------------------------------------------------
+
+def hpu_section_header(title, description=""):
+    st.markdown(f"## {title}")
+    if description:
+        st.caption(description)
+
+
+def hpu_read_table(table_name):
+    """Read a permitted HPU table safely."""
+    try:
+        return get_table(table_name)
+    except Exception as error:
+        st.warning(f"Could not load {table_name}: {error}")
+        return pd.DataFrame()
+
+
+def hpu_save_source_record(title, source_text, source_type,
+                           audience, platform, objective, language):
+    """Save original material without changing its wording."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO source_materials
+        (title, source_text, source_type, audience,
+         platform, objective, language, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        title,
+        source_text,
+        source_type,
+        audience,
+        platform,
+        objective,
+        language,
+        datetime.now().isoformat(timespec="seconds")
+    ))
+
+    source_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return source_id
+
+
+def hpu_save_analysis_record(source_id, analysis):
+    """Save the local HPU Core analysis."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO analysis_records
+        (source_id, analysis_json, engine, created_at)
+        VALUES (?, ?, ?, ?)
+    """, (
+        source_id,
+        json.dumps(analysis, ensure_ascii=False),
+        "HPU Core - Independent Analysis",
+        datetime.now().isoformat(timespec="seconds")
+    ))
+
+    conn.commit()
+    conn.close()
+
+
+def hpu_save_generated_asset(source_id, asset_type, title, text_content):
+    """Save a generated text asset."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO generated_assets
+        (source_id, asset_type, title, asset_text,
+         engine, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        source_id,
+        asset_type,
+        title,
+        text_content,
+        "HPU Core",
+        datetime.now().isoformat(timespec="seconds")
+    ))
+
+    conn.commit()
+    conn.close()
+
+
+# ------------------------------------------------------------
+# 2. INDEPENDENT HPU CORE ANALYSIS
+# ------------------------------------------------------------
+
+def hpu_core_diagnosis(source_text, audience, platform, objective):
+    """
+    A local analytical process.
+    Does not require OpenAI, internet access or an API key.
+    """
+
+    text = source_text.strip()
+    lower_text = text.lower()
+
+    if not text:
+        return {
+            "status": "No source material",
+            "main_theme": "Not available",
+            "strategic_observation": "Add source material before analysis.",
+            "objective_check": "Not assessed",
+            "measurement_check": "Not assessed",
+            "recommendations": []
+        }
+
+    expertise_map = {
+        "Strategic Communication": [
+            "strategic communication", "strategy", "communication",
+            "الاتصال الاستراتيجي", "التواصل الاستراتيجي", "الاتصال"
+        ],
+        "Leadership and Management": [
+            "leadership", "management", "team", "governance",
+            "القيادة", "الإدارة", "الفريق", "الحوكمة"
+        ],
+        "Change Management": [
+            "change", "transformation", "readiness",
+            "التغيير", "التحول", "الجاهزية"
+        ],
+        "Marketing and Branding": [
+            "marketing", "brand", "reputation", "campaign",
+            "التسويق", "العلامة التجارية", "السمعة", "الحملة"
+        ],
+        "Performance and Measurement": [
+            "measurement", "baseline", "performance", "kpi",
+            "measurement", "القياس", "خط الأساس", "الأداء", "المؤشرات"
+        ],
+        "Stakeholder Engagement": [
+            "stakeholder", "engagement", "audience",
+            "أصحاب المصلحة", "التفاعل", "الجمهور"
+        ]
+    }
+
+    detected_expertise = []
+
+    for category, keywords in expertise_map.items():
+        if any(keyword in lower_text for keyword in keywords):
+            detected_expertise.append(category)
+
+    if not detected_expertise:
+        detected_expertise = ["General Professional Insight"]
+
+    # Identify measurement concepts
+    measurement_terms = [
+        "baseline", "kpi", "metric", "measurement",
+        "خط الأساس", "مؤشر", "قياس", "مؤشرات الأداء"
+    ]
+
+    has_measurement = any(
+        term in lower_text for term in measurement_terms
+    )
+
+    # Identify objective concepts
+    objective_terms = [
+        "objective", "goal", "purpose", "هدف",
+        "أهداف", "غاية", "الغرض"
+    ]
+
+    has_objective = any(
+        term in lower_text for term in objective_terms
+    )
+
+    # Detect evidence indicators
+    evidence_terms = [
+        "percent", "%", "million", "thousand",
+        "sar", "budget", "increase", "decrease",
+        "نسبة", "مليون", "ألف", "ميزانية"
+    ]
+
+    has_evidence = any(
+        term in lower_text for term in evidence_terms
+    )
+
+    recommendations = []
+
+    if not has_objective:
+        recommendations.append(
+            "Clarify the intended communication objective."
+        )
+
+    if not has_measurement:
+        recommendations.append(
+            "Identify a measurable baseline and suitable KPIs."
+        )
+
+    if not has_evidence:
+        recommendations.append(
+            "Consider adding verified examples, evidence or experience."
+        )
+
+    if not recommendations:
+        recommendations.append(
+            "Review whether the evidence and indicators demonstrate "
+            "the intended outcome."
+        )
+
+    strategic_observation = (
+        "The source contains professional material that can be "
+        "developed into a strategic communication insight. "
+        "The next step is to connect its central idea to a specific "
+        "audience need and a measurable outcome."
+    )
+
+    if has_objective and not has_measurement:
+        strategic_observation = (
+            "An objective appears in the source, but the measurement "
+            "dimension needs further development. An objective without "
+            "a baseline makes it difficult to evaluate performance."
+        )
+
+    if has_measurement and not has_objective:
+        strategic_observation = (
+            "The source includes measurement-related concepts. "
+            "However, indicators should be connected to a clearly "
+            "defined objective so that measurement reflects impact."
+        )
+
+    if has_objective and has_measurement:
+        strategic_observation = (
+            "The source connects objective-setting and measurement "
+            "concepts. The next step is to check whether the selected "
+            "indicators genuinely demonstrate the intended outcome."
+        )
+
+    return {
+        "status": "Analysis completed",
+        "main_theme": ", ".join(detected_expertise),
+        "strategic_observation": strategic_observation,
+        "objective_check": (
+            "Objective-related language detected"
+            if has_objective else
+            "Objective needs clarification"
+        ),
+        "measurement_check": (
+            "Measurement-related language detected"
+            if has_measurement else
+            "Baseline and KPIs need clarification"
+        ),
+        "evidence_check": (
+            "Possible evidence indicators detected"
+            if has_evidence else
+            "No clear numerical or evidence indicators detected"
+        ),
+        "audience": audience,
+        "platform": platform,
+        "intended_objective": objective,
+        "recommendations": recommendations,
+        "source_length": len(text),
+        "analysis_engine": "HPU Core - Local Rules Engine"
+    }
+
+
+# ------------------------------------------------------------
+# 3. LOCAL CONTENT DEVELOPMENT
+# ------------------------------------------------------------
+
+def hpu_local_post(source_text, audience, tone="Professional"):
+    """
+    Create a structured draft from the original source.
+    The original idea remains the foundation.
+    """
+
+    source_text = source_text.strip()
+
+    return f"""[Opening insight]
+
+{source_text}
+
+[Strategic perspective]
+
+This idea highlights an important consideration for
+{audience.lower()}: professional communication should be
+connected to a clear purpose, an identified audience and
+a meaningful outcome.
+
+The value of communication is not determined only by
+the volume of activities or the visibility of published
+content. It also depends on whether the intended message
+supports a defined organizational objective.
+
+[Closing reflection]
+
+The question is not simply how much communication
+an organization produces, but what that communication
+is designed to achieve.
+
+#StrategicCommunication #Leadership #PerformanceMeasurement
+"""
+
+
+def hpu_local_article(source_text, audience):
+    return f"""# From Professional Insight to Strategic Impact
+
+## The original idea
+
+{source_text}
+
+## Why this matters
+
+For {audience.lower()}, this idea raises an important
+question about the relationship between communication
+activities and organizational priorities.
+
+Communication should not be treated as an isolated
+publishing activity. It needs to be connected to a
+defined purpose, a relevant audience and an intended
+result.
+
+## From activity to outcome
+
+Organizations can produce large volumes of content
+without necessarily understanding the impact of that
+content.
+
+A stronger approach begins by defining the objective,
+identifying the starting point and selecting indicators
+that help assess progress.
+
+## Questions for professional practice
+
+- What is the intended outcome?
+- Who needs to receive or act on the message?
+- What is the starting point?
+- Which indicators can demonstrate progress?
+- How will the organization learn from the results?
+
+## Conclusion
+
+Strategic communication becomes more valuable when
+planning, execution and measurement work together.
+"""
+
+
+def hpu_local_visual_brief(source_text, audience):
+    return f"""VISUAL CONTENT BRIEF
+
+Core source:
+{source_text}
+
+Target audience:
+{audience}
+
+Suggested visual concept:
+A professional strategic communication framework.
+
+Suggested layout:
+1. Central message.
+2. Communication objective.
+3. Target audience.
+4. Baseline and indicators.
+5. Intended outcome.
+
+Visual direction:
+Clean executive design, clear information hierarchy,
+professional typography and restrained corporate colours.
+
+Important:
+The visual must communicate the original idea without
+introducing unsupported statistics or claims.
+"""
+
+
+def hpu_local_audio_script(source_text, audience):
+    return f"""AUDIO / PODCAST SCRIPT
+
+Opening:
+Welcome. Today, we are exploring an important
+professional idea.
+
+Main idea:
+{source_text}
+
+Discussion:
+For professionals working with {audience.lower()},
+this idea encourages us to look beyond routine activities
+and consider the purpose and results of our work.
+
+Reflection:
+Are we measuring what we do, or are we measuring
+what our work actually achieves?
+
+Closing:
+Thank you for listening. Strategic thinking begins
+with asking the right questions.
+"""
+
+
+# ------------------------------------------------------------
+# 4. DASHBOARD
+# ------------------------------------------------------------
+
+def hpu_render_dashboard():
+
+    hpu_section_header(
+        "HPU Executive Dashboard",
+        "A central view of the Human Processing Unit knowledge "
+        "and content development environment."
+    )
+
+    experiences = hpu_read_table("experiences")
+    content = hpu_read_table("content")
+    sources = hpu_read_table("source_materials")
+    assets = hpu_read_table("generated_assets")
+    interviews = hpu_read_table("interviews")
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        st.metric("Professional Experiences", len(experiences))
+
+    with c2:
+        st.metric("Original Sources", len(sources))
+
+    with c3:
+        st.metric("Generated Assets", len(assets))
+
+    c4, c5, c6 = st.columns(3)
+
+    with c4:
+        st.metric("Content Records", len(content))
+
+    with c5:
+        st.metric("Interview Records", len(interviews))
+
+    with c6:
+        analysis = hpu_read_table("analysis_records")
+        st.metric("Analysis Records", len(analysis))
+
+    st.divider()
+
+    st.markdown("### HPU Processing Model")
+
+    st.markdown("""
+    **01 — Input**
+
+    Professional experiences, CV information, interviews,
+    original posts and other source materials.
+
+    **02 — Interpretation**
+
+    Independent HPU Core analysis, expertise classification,
+    strategic diagnosis and evidence assessment.
+
+    **03 — Development**
+
+    Content strategies, posts, articles, visual briefs
+    and audio scripts.
+
+    **04 — Evaluation**
+
+    Publishing records, performance indicators,
+    feedback and continuous improvement.
+    """)
+
+    st.info(
+        "HPU Core analysis operates independently. "
+        "External AI services are optional enhancements."
+    )
+
+
+# ------------------------------------------------------------
+# 5. CONTENT STUDIO
+# ------------------------------------------------------------
+
+def hpu_render_content_studio():
+
+    hpu_section_header(
+        "Content Intelligence Studio",
+        "Convert original professional knowledge into structured "
+        "content while preserving its central meaning."
+    )
+
+    with st.form("hpu_content_form"):
+
+        title = st.text_input(
+            "Source title",
+            placeholder="Enter a title for the original material"
+        )
+
+        source_text = st.text_area(
+            "Original source material",
+            height=180,
+            placeholder="Paste the original post, experience, "
+                        "interview answer or professional idea here."
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            source_type = st.selectbox(
+                "Source type",
+                [
+                    "Professional Insight",
+                    "Social Media Post",
+                    "Professional Experience",
+                    "Interview",
+                    "CV Information",
+                    "Article",
+                    "Other"
+                ]
+            )
+
+            audience = st.selectbox(
+                "Target audience",
+                [
+                    "Senior Executives",
+                    "Communication Professionals",
+                    "Government Leaders",
+                    "Business Leaders",
+                    "Consultants",
+                    "Academic Audience",
+                    "General Professional Audience"
+                ]
+            )
+
+        with col2:
+            platform = st.selectbox(
+                "Platform",
+                [
+                    "LinkedIn",
+                    "Website",
+                    "Podcast",
+                    "Instagram",
+                    "X",
+                    "Multiple Platforms"
+                ]
+            )
+
+            language = st.selectbox(
+                "Language",
+                ["English", "Arabic", "Bilingual"]
+            )
+
+        objective = st.selectbox(
+            "Communication objective",
+            [
+                "Build Professional Authority",
+                "Share Professional Knowledge",
+                "Demonstrate Experience",
+                "Educate the Audience",
+                "Strengthen Personal Brand",
+                "Encourage Discussion",
+                "Other"
+            ]
+        )
+
+        submitted = st.form_submit_button(
+            "Analyse Source with HPU Core",
+            use_container_width=True
+        )
+
+    if submitted:
+
+        if not source_text.strip():
+            st.error("Please enter the original source material.")
+
+        else:
+            source_id = hpu_save_source_record(
+                title or "Untitled Source",
+                source_text,
+                source_type,
+                audience,
+                platform,
+                objective,
+                language
+            )
+
+            analysis = hpu_core_diagnosis(
+                source_text,
+                audience,
+                platform,
+                objective
+            )
+
+            hpu_save_analysis_record(source_id, analysis)
+
+            st.session_state["hpu_current_source_id"] = source_id
+            st.session_state["hpu_current_source_text"] = source_text
+            st.session_state["hpu_current_audience"] = audience
+            st.session_state["hpu_current_analysis"] = analysis
+
+            st.success(
+                f"Source saved and analysed. Reference: {source_id}"
+            )
+
+    if "hpu_current_analysis" in st.session_state:
+
+        analysis = st.session_state["hpu_current_analysis"]
+
+        st.divider()
+        st.markdown("### HPU Core Analysis")
+
+        st.write("**Main theme:**", analysis["main_theme"])
+
+        st.write(
+            "**Strategic observation:**",
+            analysis["strategic_observation"]
+        )
+
+        st.write(
+            "**Objective assessment:**",
+            analysis["objective_check"]
+        )
+
+        st.write(
+            "**Measurement assessment:**",
+            analysis["measurement_check"]
+        )
+
+        st.write(
+            "**Evidence assessment:**",
+            analysis["evidence_check"]
+        )
+
+        st.markdown("#### HPU Recommendations")
+
+        for recommendation in analysis["recommendations"]:
+            st.write("•", recommendation)
+
+        st.divider()
+        st.markdown("### Develop Content")
+
+        content_type = st.selectbox(
+            "Choose the content format",
+            [
+                "LinkedIn Post",
+                "Professional Article",
+                "Visual Content Brief",
+                "Podcast / Audio Script"
+            ],
+            key="hpu_content_type"
+        )
+
+        if st.button("Generate with HPU Core", use_container_width=True):
+
+            original = st.session_state["hpu_current_source_text"]
+            target = st.session_state["hpu_current_audience"]
+            source_id = st.session_state["hpu_current_source_id"]
+
+            if content_type == "LinkedIn Post":
+                generated = hpu_local_post(original, target)
+                asset_type = "Post"
+
+            elif content_type == "Professional Article":
+                generated = hpu_local_article(original, target)
+                asset_type = "Article"
+
+            elif content_type == "Visual Content Brief":
+                generated = hpu_local_visual_brief(original, target)
+                asset_type = "Visual Brief"
+
+            else:
+                generated = hpu_local_audio_script(original, target)
+                asset_type = "Audio Script"
+
+            st.session_state["hpu_generated_text"] = generated
+            st.session_state["hpu_generated_type"] = asset_type
+            st.session_state["hpu_generated_source_id"] = source_id
+
+        if "hpu_generated_text" in st.session_state:
+
+            st.markdown("#### Generated Draft")
+
+            edited_text = st.text_area(
+                "Review and edit the draft",
+                value=st.session_state["hpu_generated_text"],
+                height=300,
+                key="hpu_edited_generated_text"
+            )
+
+            if st.button("Save Generated Asset", use_container_width=True):
+
+                hpu_save_generated_asset(
+                    st.session_state["hpu_generated_source_id"],
+                    st.session_state["hpu_generated_type"],
+                    st.session_state["hpu_generated_type"] + " Draft",
+                    edited_text
+                )
+
+                st.success("Generated asset saved to the HPU database.")
+
+            st.download_button(
+                "Download Draft",
+                data=edited_text,
+                file_name="hpu_content_draft.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
+
+
+# ------------------------------------------------------------
+# 6. SOURCE LIBRARY
+# ------------------------------------------------------------
+
+def hpu_render_source_library():
+
+    hpu_section_header(
+        "Source Knowledge Library",
+        "Review original materials and generated knowledge assets."
+    )
+
+    sources = hpu_read_table("source_materials")
+
+    if sources.empty:
+        st.info("No source materials have been saved yet.")
+    else:
+        st.dataframe(
+            sources,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        if "id" in sources.columns:
+
+            selected_id = st.selectbox(
+                "Select a source reference",
+                sources["id"].tolist(),
+                key="hpu_source_library_id"
+            )
+
+            selected = sources[
+                sources["id"] == selected_id
+            ]
+
+            if not selected.empty:
+                st.markdown("### Original Source")
+                st.write(selected.iloc[0]["source_text"])
+
+    st.divider()
+    st.markdown("### Generated Assets")
+
+    assets = hpu_read_table("generated_assets")
+
+    if assets.empty:
+        st.info("No generated assets have been saved yet.")
+    else:
+        st.dataframe(
+            assets.drop(columns=["file_data"], errors="ignore"),
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+# ------------------------------------------------------------
+# 7. PROFESSIONAL EXPERIENCES
+# ------------------------------------------------------------
+
+def hpu_render_experiences():
+
+    hpu_section_header(
+        "Professional Experience Database",
+        "Build a structured knowledge base from professional "
+        "experiences and achievements."
+    )
+
+    with st.form("hpu_experience_form"):
+
+        experience_title = st.text_input("Experience title")
+
+        description = st.text_area(
+            "Experience description",
+            height=150
+        )
+
+        expertise = st.text_input(
+            "Expertise category",
+            placeholder="Example: Strategic Communication"
+        )
+
+        submitted = st.form_submit_button(
+            "Save Experience",
+            use_container_width=True
+        )
+
+    if submitted:
+
+        if not experience_title.strip() or not description.strip():
+            st.error("Enter both an experience title and description.")
+
+        else:
+            conn = get_db()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO experiences
+                (title, description, expertise, date_added)
+                VALUES (?, ?, ?, ?)
+            """, (
+                experience_title,
+                description,
+                expertise,
+                datetime.now().isoformat(timespec="seconds")
+            ))
+
+            conn.commit()
+            conn.close()
+
+            st.success("Professional experience saved.")
+
+    st.divider()
+    st.markdown("### Existing Experiences")
+
+    experiences = hpu_read_table("experiences")
+
+    if experiences.empty:
+        st.info("No professional experiences have been entered.")
+    else:
+        st.dataframe(
+            experiences,
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+# ------------------------------------------------------------
+# 8. INTERVIEW RECORDS
+# ------------------------------------------------------------
+
+def hpu_render_interviews():
+
+    hpu_section_header(
+        "Professional Interview Capture",
+        "Record first-hand knowledge and insights from interviews."
+    )
+
+    with st.form("hpu_interview_form"):
+
+        topic = st.text_input("Interview topic")
+
+        question = st.text_area(
+            "Interview question",
+            height=90
+        )
+
+        answer = st.text_area(
+            "Interview answer",
+            height=180
+        )
+
+        insight = st.text_area(
+            "Key insight or observation",
+            height=120
+        )
+
+        submitted = st.form_submit_button(
+            "Save Interview Record",
+            use_container_width=True
+        )
+
+    if submitted:
+
+        if not question.strip() or not answer.strip():
+            st.error("A question and answer are required.")
+
+        else:
+            conn = get_db()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO interviews
+                (topic, question, answer, insight, created_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                topic,
+                question,
+                answer,
+                insight,
+                datetime.now().isoformat(timespec="seconds")
+            ))
+
+            conn.commit()
+            conn.close()
+
+            st.success("Interview record saved.")
+
+    st.divider()
+    st.markdown("### Interview History")
+
+    interviews = hpu_read_table("interviews")
+
+    if interviews.empty:
+        st.info("No interview records have been saved.")
+    else:
+        st.dataframe(
+            interviews,
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+# ------------------------------------------------------------
+# 9. PERFORMANCE ANALYTICS
+# ------------------------------------------------------------
+
+def hpu_render_analytics():
+
+    hpu_section_header(
+        "Content Performance Analytics",
+        "Record and review the performance of published content."
+    )
+
+    content = hpu_read_table("content")
+    performance = hpu_read_table("performance")
+
+    if content.empty:
+        st.info(
+            "There are no content records yet. "
+            "Add content records before recording performance."
+        )
+        return
+
+    st.markdown("### Content Records")
+
+    st.dataframe(
+        content,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    if "id" not in content.columns:
+        st.warning("Content records do not contain an ID field.")
+        return
+
+    st.divider()
+    st.markdown("### Record Performance")
+
+    with st.form("hpu_performance_form"):
+
+        content_id = st.selectbox(
+            "Select content",
+            content["id"].tolist()
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            views = st.number_input(
+                "Views",
+                min_value=0,
+                step=1
+            )
+
+            likes = st.number_input(
+                "Likes",
+                min_value=0,
+                step=1
+            )
+
+        with col2:
+            comments = st.number_input(
+                "Comments",
+                min_value=0,
+                step=1
+            )
+
+            shares = st.number_input(
+                "Shares",
+                min_value=0,
+                step=1
+            )
+
+        submitted = st.form_submit_button(
+            "Save Performance Data",
+            use_container_width=True
+        )
+
+    if submitted:
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO performance
+            (content_id, views, likes, comments, shares)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            content_id,
+            int(views),
+            int(likes),
+            int(comments),
+            int(shares)
+        ))
+
+        conn.commit()
+        conn.close()
+
+        st.success("Performance data saved.")
+
+        performance = hpu_read_table("performance")
+
+    if not performance.empty:
+
+        st.divider()
+        st.markdown("### Recorded Performance")
+
+        st.dataframe(
+            performance,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        total_views = int(performance["views"].fillna(0).sum())
+        total_likes = int(performance["likes"].fillna(0).sum())
+        total_comments = int(performance["comments"].fillna(0).sum())
+        total_shares = int(performance["shares"].fillna(0).sum())
+
+        a, b, c, d = st.columns(4)
+
+        a.metric("Total Views", f"{total_views:,}")
+        b.metric("Total Likes", f"{total_likes:,}")
+        c.metric("Comments", f"{total_comments:,}")
+        d.metric("Shares", f"{total_shares:,}")
+
+
+# ------------------------------------------------------------
+# 10. HPU METHODOLOGY
+# ------------------------------------------------------------
+
+def hpu_render_methodology():
+
+    hpu_section_header(
+        "HPU Methodology and Architecture",
+        "How HPU transforms professional knowledge into "
+        "structured strategic content."
+    )
+
+    st.markdown("""
+    ### 1. Knowledge Input
+
+    HPU accepts professional experiences, CV information,
+    interview answers, original posts, articles and other
+    knowledge sources.
+
+    ### 2. Independent HPU Core
+
+    The local engine performs its own processing:
+
+    - Keyword and expertise classification.
+    - Identification of strategic themes.
+    - Objective assessment.
+    - Baseline and measurement checks.
+    - Evidence and information-gap identification.
+    - Recommendations based on predefined analytical rules.
+
+    ### 3. Content Development
+
+    HPU transforms source material into different formats:
+
+    - LinkedIn posts.
+    - Professional articles.
+    - Visual content briefs.
+    - Podcast and audio scripts.
+    - Publishing concepts and strategies.
+
+    ### 4. Optional AI Enhancement
+
+    OpenAI can enhance selected tasks when configured.
+    It is not required for the independent HPU Core
+    analysis and local content-generation functions.
+
+    ### 5. Learning and Measurement
+
+    Content performance and human feedback can be recorded
+    to support future strategic decisions.
+    """)
+
+    st.warning(
+        "The current local engine uses transparent rules and "
+        "templates. It is an initial analytical foundation, "
+        "not a claim that the system already has human-level "
+        "judgement or autonomous learning."
+    )
+    
+# ============================================================
+# SECTION 4 OF 4
+# HPU FINAL INTEGRATION AND APPLICATION LAUNCH
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. CV KNOWLEDGE BASE
+# ------------------------------------------------------------
+
+def hpu_render_cv_knowledge():
+
+    hpu_section_header(
+        "CV Knowledge Base",
+        "Organise professional information and distinguish verified "
+        "facts from information requiring confirmation."
+    )
+
+    st.markdown("""
+    The CV Knowledge Base is intended to preserve professional
+    information as a structured source for future analysis and
+    content development.
+
+    **Verification principle**
+
+    - Verified: checked against the original CV or supporting evidence.
+    - Needs verification: entered but not yet checked.
+    - Hypothesis: an interpretation that must not be presented as fact.
+    - Missing information: requires an interview or additional evidence.
+    """)
+
+    st.warning(
+        "Do not publish achievements, budgets, percentages, team sizes "
+        "or project results until they have been checked against the "
+        "original CV or supporting documentation."
+    )
+
+    # Display the initial CV reference material, if defined in Section 1.
+    if "CV_FACTS" in globals():
+        st.markdown("### Initial CV Reference Material")
+        st.caption(
+            "Treat these reference notes as requiring verification "
+            "against the original CV."
+        )
+        st.write(CV_FACTS)
+    else:
+        st.info(
+            "No initial CV reference material was found. "
+            "You can add professional information below."
+        )
+
+    st.divider()
+    st.markdown("### Add a CV Knowledge Record")
+
+    with st.form("hpu_cv_knowledge_form"):
+
+        title = st.text_input(
+            "Professional fact or achievement",
+            placeholder="Example: Led a strategic communication programme"
+        )
+
+        description = st.text_area(
+            "Details and supporting context",
+            height=130
+        )
+
+        expertise = st.selectbox(
+            "Knowledge category",
+            [
+                "Strategic Communication",
+                "Corporate Communication",
+                "Integrated Marketing",
+                "Leadership and Management",
+                "Change Management",
+                "Campaign Management",
+                "Reputation and Branding",
+                "Stakeholder Engagement",
+                "Project and Programme Management",
+                "Performance Measurement",
+                "Events and Experiences",
+                "Other"
+            ]
+        )
+
+        verification = st.selectbox(
+            "Verification status",
+            [
+                "Needs verification",
+                "Verified against original CV",
+                "Supported by additional evidence",
+                "Hypothesis - not a confirmed fact"
+            ]
+        )
+
+        submitted = st.form_submit_button(
+            "Save CV Knowledge",
+            use_container_width=True
+        )
+
+    if submitted:
+
+        if not title.strip() or not description.strip():
+            st.error("Please enter the title and details.")
+        else:
+
+            # Store the record with its verification status
+            # in the description to avoid changing the existing schema.
+            stored_description = (
+                f"Verification status: {verification}\n\n"
+                f"{description}"
+            )
+
+            conn = get_db()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO experiences
+                (title, description, expertise, date_added)
+                VALUES (?, ?, ?, ?)
+            """, (
+                title,
+                stored_description,
+                expertise,
+                datetime.now().isoformat(timespec="seconds")
+            ))
+
+            conn.commit()
+            conn.close()
+
+            st.success("CV knowledge record saved.")
+
+    st.divider()
+    st.markdown("### Stored Professional Knowledge")
+
+    experiences = hpu_read_table("experiences")
+
+    if experiences.empty:
+        st.info("No professional knowledge records have been saved.")
+    else:
+        st.dataframe(
+            experiences,
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+# ------------------------------------------------------------
+# 2. PUBLISHING PLANNER
+# ------------------------------------------------------------
+
+def hpu_render_publishing_planner():
+
+    hpu_section_header(
+        "Publishing Planner",
+        "Organise content ideas and planned publication dates."
+    )
+
+    with st.form("hpu_publishing_form"):
+
+        title = st.text_input("Content title")
+
+        audience = st.selectbox(
+            "Target audience",
+            [
+                "Senior Executives",
+                "Communication Professionals",
+                "Government Leaders",
+                "Business Leaders",
+                "Consultants",
+                "Academic Audience",
+                "General Professional Audience"
+            ]
+        )
+
+        platform = st.selectbox(
+            "Publishing platform",
+            [
+                "LinkedIn",
+                "Website",
+                "Instagram",
+                "X",
+                "Podcast",
+                "Multiple Platforms"
+            ]
+        )
+
+        content_type = st.selectbox(
+            "Content format",
+            [
+                "Post",
+                "Article",
+                "Video",
+                "Visual",
+                "Podcast",
+                "Other"
+            ]
+        )
+
+        objective = st.selectbox(
+            "Content objective",
+            [
+                "Build Professional Authority",
+                "Share Professional Knowledge",
+                "Demonstrate Experience",
+                "Educate the Audience",
+                "Strengthen Personal Brand",
+                "Encourage Discussion"
+            ]
+        )
+
+        status = st.selectbox(
+            "Publication status",
+            [
+                "Idea",
+                "Draft",
+                "Under Review",
+                "Approved",
+                "Scheduled",
+                "Published"
+            ]
+        )
+
+        publish_date = st.date_input(
+            "Planned publication date",
+            value=date.today()
+        )
+
+        submitted = st.form_submit_button(
+            "Add to Publishing Planner",
+            use_container_width=True
+        )
+
+    if submitted:
+
+        if not title.strip():
+            st.error("Please enter a content title.")
+        else:
+
+            conn = get_db()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO content
+                (title, audience, platform, content_type,
+                 status, objective, publish_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                title,
+                audience,
+                platform,
+                content_type,
+                status,
+                objective,
+                publish_date.isoformat()
+            ))
+
+            conn.commit()
+            conn.close()
+
+            st.success("Content added to the publishing planner.")
+
+    st.divider()
+    st.markdown("### Publishing Schedule")
+
+    content = hpu_read_table("content")
+
+    if content.empty:
+        st.info("No content has been scheduled yet.")
+    else:
+
+        if "publish_date" in content.columns:
+            content = content.sort_values(
+                by="publish_date",
+                ascending=True,
+                na_position="last"
+            )
+
+        st.dataframe(
+            content,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        if "status" in content.columns:
+
+            st.markdown("### Content Status Overview")
+
+            status_counts = (
+                content["status"]
+                .fillna("Not specified")
+                .value_counts()
+            )
+
+            st.bar_chart(status_counts)
+
+
+# ------------------------------------------------------------
+# 3. HPU SYSTEM STATUS
+# ------------------------------------------------------------
+
+def hpu_render_system_status():
+
+    hpu_section_header(
+        "System Status",
+        "Review the independent HPU Core and optional external services."
+    )
+
+    st.markdown("### HPU Core")
+
+    st.success("Local analytical engine: available")
+
+    st.write(
+        "The local analysis and template-based content functions "
+        "do not require an OpenAI API key."
+    )
+
+    st.markdown("### Optional OpenAI Connection")
+
+    api_key_available = False
+
+    try:
+        api_key_available = bool(
+            st.secrets.get("OPENAI_API_KEY", "")
+        )
+    except Exception:
+        api_key_available = False
+
+    if api_key_available:
+        st.success("An OpenAI API key is configured in Streamlit Secrets.")
+    else:
+        st.info(
+            "No OpenAI API key is configured. HPU Core can still "
+            "perform its local analysis and content-generation tasks."
+        )
+
+    st.markdown("### Database")
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table'
+            ORDER BY name
+        """)
+
+        tables = cursor.fetchall()
+        conn.close()
+
+        table_names = [
+            row[0] if not isinstance(row, dict) else row["name"]
+            for row in tables
+        ]
+
+        st.success("Database connection successful.")
+
+        st.write("Available database tables:")
+        st.write(", ".join(table_names))
+
+    except Exception as error:
+        st.error(f"Database check failed: {error}")
+
+    st.divider()
+
+    st.markdown("### Important Deployment Note")
+
+    st.warning(
+        "Streamlit Cloud's local filesystem may not provide permanent "
+        "SQLite storage across app restarts or redeployments. "
+        "For a production HPU system, use a persistent external "
+        "database and implement regular backups."
+    )
+
+
+# ------------------------------------------------------------
+# 4. MAIN NAVIGATION
+# ------------------------------------------------------------
+
+def main():
+
+    st.sidebar.title("HPU")
+    st.sidebar.caption("HUMAN PROCESSING UNIT")
+    st.sidebar.divider()
+
+    page = st.sidebar.radio(
+        "APPLICATION MODULES",
+        [
+            "Executive Dashboard",
+            "Content Intelligence Studio",
+            "Professional Experiences",
+            "CV Knowledge Base",
+            "Interview Capture",
+            "Source Knowledge Library",
+            "Publishing Planner",
+            "Performance Analytics",
+            "HPU Methodology",
+            "System Status"
+        ]
+    )
+
+    st.sidebar.divider()
+
+    st.sidebar.markdown("### HPU Architecture")
+
+    st.sidebar.caption(
+        "Independent Core Intelligence"
+    )
+
+    st.sidebar.caption(
+        "Optional AI Enhancement"
+    )
+
+    st.sidebar.caption(
+        "Professional Knowledge Database"
+    )
+
+    st.sidebar.caption(
+        "Content Development and Measurement"
+    )
+
+    st.sidebar.divider()
+
+    st.sidebar.caption(
+        "HPU | Dr. Alaa Zahran Pilot"
+    )
+
+    # Route the selected page
+    if page == "Executive Dashboard":
+        hpu_render_dashboard()
+
+    elif page == "Content Intelligence Studio":
+        hpu_render_content_studio()
+
+    elif page == "Professional Experiences":
+        hpu_render_experiences()
+
+    elif page == "CV Knowledge Base":
+        hpu_render_cv_knowledge()
+
+    elif page == "Interview Capture":
+        hpu_render_interviews()
+
+    elif page == "Source Knowledge Library":
+        hpu_render_source_library()
+
+    elif page == "Publishing Planner":
+        hpu_render_publishing_planner()
+
+    elif page == "Performance Analytics":
+        hpu_render_analytics()
+
+    elif page == "HPU Methodology":
+        hpu_render_methodology()
+
+    elif page == "System Status":
+        hpu_render_system_status()
+
+
+# ------------------------------------------------------------
+# 5. APPLICATION ENTRY POINT
+# ------------------------------------------------------------
+
+if __name__ == "__main__":
+    main()
+
+
+# ============================================================
+# END OF HPU APPLICATION
+# ============================================================
+
+
+
+# ============================================================
+# END OF SECTION 3
+# SECTION 4 WILL CONNECT THE NAVIGATION AND START THE APP
+# ============================================================
