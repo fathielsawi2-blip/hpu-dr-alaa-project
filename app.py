@@ -390,7 +390,19 @@ def get_openai_client():
 
 
 def generate_text_with_ai(client, prompt):
-    
+    if client is None:
+        return None
+
+    try:
+        response = client.responses.create(
+            model=TEXT_MODEL,
+            input=prompt
+        )
+        return response.output_text.strip()
+    except Exception:
+        return None
+
+
 def generate_ai_analysis(client, source_text, goal, audience):
     """AI analysis engine. Independent from HPU Core."""
 
@@ -409,57 +421,37 @@ OBJECTIVE:
 TARGET AUDIENCE:
 {audience}
 
-Return valid JSON only, using this structure:
+Return valid JSON only:
 
 {{
     "main_theme": "Main strategic theme",
     "contextual_insight": "Deeper interpretation",
-    "content_opportunities": [
-        "Opportunity 1",
-        "Opportunity 2"
-    ],
-    "strategic_recommendations": [
-        "Recommendation 1",
-        "Recommendation 2"
-    ],
-    "missing_information": [
-        "Information requiring verification"
-    ],
-    "potential_audiences": [
-        "Relevant audience"
-    ]
+    "content_opportunities": ["Opportunity 1", "Opportunity 2"],
+    "strategic_recommendations": ["Recommendation 1", "Recommendation 2"],
+    "missing_information": ["Information requiring verification"],
+    "potential_audiences": ["Relevant audience"]
 }}
 
-Rules:
-- Never invent achievements, statistics or facts.
-- Distinguish facts from interpretation.
-- Preserve the meaning of the source.
-- Identify missing evidence.
-- Think strategically and creatively.
+Never invent facts, achievements or statistics.
+Distinguish facts from interpretation.
+Identify missing evidence.
 """
 
     response = client.responses.create(
         model=TEXT_MODEL,
-        instructions=(
-            "You are the independent AI analytical engine "
-            "working alongside HPU. Provide contextual, "
-            "evidence-conscious strategic analysis."
-        ),
         input=prompt
     )
 
     raw = response.output_text.strip()
-
     raw = re.sub(r"^```json\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
 
     result = json.loads(raw)
 
     if not isinstance(result, dict):
-        raise ValueError("AI returned an invalid analysis structure.")
+        raise ValueError("Invalid AI analysis.")
 
     return result
-
 
 def run_hybrid_analysis(source_text, goal, audience):
     """
