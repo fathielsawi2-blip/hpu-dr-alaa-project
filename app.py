@@ -390,6 +390,211 @@ def get_openai_client():
 
 
 def generate_text_with_ai(client, prompt):
+    
+def generate_ai_analysis(client, source_text, goal, audience):
+    """AI analysis engine. Independent from HPU Core."""
+
+    if client is None:
+        raise RuntimeError("AI engine unavailable.")
+
+    prompt = f"""
+Analyse the following professional source material.
+
+SOURCE:
+{source_text}
+
+OBJECTIVE:
+{goal}
+
+TARGET AUDIENCE:
+{audience}
+
+Return valid JSON only, using this structure:
+
+{{
+    "main_theme": "Main strategic theme",
+    "contextual_insight": "Deeper interpretation",
+    "content_opportunities": [
+        "Opportunity 1",
+        "Opportunity 2"
+    ],
+    "strategic_recommendations": [
+        "Recommendation 1",
+        "Recommendation 2"
+    ],
+    "missing_information": [
+        "Information requiring verification"
+    ],
+    "potential_audiences": [
+        "Relevant audience"
+    ]
+}}
+
+Rules:
+- Never invent achievements, statistics or facts.
+- Distinguish facts from interpretation.
+- Preserve the meaning of the source.
+- Identify missing evidence.
+- Think strategically and creatively.
+"""
+
+    response = client.responses.create(
+        model=TEXT_MODEL,
+        instructions=(
+            "You are the independent AI analytical engine "
+            "working alongside HPU. Provide contextual, "
+            "evidence-conscious strategic analysis."
+        ),
+        input=prompt
+    )
+
+    raw = response.output_text.strip()
+
+    raw = re.sub(r"^```json\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+
+    result = json.loads(raw)
+
+    if not isinstance(result, dict):
+        raise ValueError("AI returned an invalid analysis structure.")
+
+    return result
+
+
+def run_hybrid_analysis(source_text, goal, audience):
+    """
+    Runs HPU and AI independently.
+    Either engine can provide a result if the other fails.
+    """
+
+    hpu_result = None
+    ai_result = None
+
+    hpu_error = None
+    ai_error = None
+
+    # ENGINE 1: HPU CORE
+    try:
+        hpu_result = local_analysis(source_text)
+    except Exception as error:
+        hpu_error = str(error)
+
+    # ENGINE 2: AI
+    try:
+        client = get_openai_client()
+
+        if client is None:
+            raise RuntimeError("AI connection unavailable.")
+
+        ai_result = generate_ai_analysis(
+            client,
+            source_text,
+            goal,
+            audience
+        )
+
+    except Exception as error:
+        ai_error = str(error)
+
+    # BOOLEAN ORCHESTRATION
+    hpu_ok = hpu_result is not None
+    ai_ok = ai_result is not None
+
+    if hpu_ok and ai_ok:
+        engine = "Combined HPU + AI"
+
+    elif hpu_ok:
+        engine = "HPU-only fallback"
+
+    elif ai_ok:
+        engine = "AI-only fallback"
+
+    else:
+        engine = "Safe fallback"
+
+    # Preserve the existing HPU result structure.
+    result = hpu_result or {
+        "status": "Partial analysis",
+        "detected_expertise": ["Requires further classification"],
+        "main_theme": "Requires further analysis",
+        "objective_check": "Not assessed",
+        "measurement_check": "Not assessed",
+        "evidence_check": "Not assessed",
+        "strategic_observation": (
+            "The HPU Core could not complete its analysis."
+        ),
+        "recommendations": [
+            "Review the source material and try again."
+        ],
+        "numbers_in_source": [],
+        "source_length": len(source_text),
+        "analysis_engine": "AI fallback"
+    }
+
+    # Attach independent engine results.
+    result["engine_status"] = engine
+    result["hpu_available"] = hpu_ok
+    result["ai_available"] = ai_ok
+    result["hpu_error"] = hpu_error
+    result["ai_error"] = ai_error
+
+    result["ai_insights"] = (
+        ai_result.get("contextual_insight", "")
+        if ai_ok else ""
+    )
+
+    result["ai_theme"] = (
+        ai_result.get("main_theme", "")
+        if ai_ok else ""
+    )
+
+    result["ai_opportunities"] = (
+        ai_result.get("content_opportunities", [])
+        if ai_ok else []
+    )
+
+    result["ai_recommendations"] = (
+        ai_result.get("strategic_recommendations", [])
+        if ai_ok else []
+    )
+
+    result["missing_information"] = (
+        ai_result.get("missing_information", [])
+        if ai_ok else []
+    )
+
+    # Identify areas where the engines agree or differ.
+    if hpu_ok and ai_ok:
+
+        hpu_themes = {
+            item.lower()
+            for item in hpu_result.get("detected_expertise", [])
+        }
+
+        ai_theme = str(
+            ai_result.get("main_theme", "")
+        ).lower()
+
+        result["comparison"] = {
+            "both_engines_completed": True,
+            "hpu_themes": hpu_result.get(
+                "detected_expertise", []
+            ),
+            "ai_theme": ai_result.get("main_theme", ""),
+            "requires_human_review": True
+        }
+
+    else:
+
+        result["comparison"] = {
+            "both_engines_completed": False,
+            "requires_human_review": True
+        }
+
+    result["analysis_engine"] = engine
+
+    return result, engine
+
 
     if client is None:
         raise RuntimeError("OpenAI is not configured.")
@@ -922,7 +1127,8 @@ def save_source(title, source_type, raw_text, audience,
         return cursor.lastrowid
 
 
-def save_analysis(source_id, analysis):
+
+def save_analysis(source_id, analysis, engine=None):
 
     with connect_db() as conn:
 
@@ -933,7 +1139,10 @@ def save_analysis(source_id, analysis):
         """, (
             source_id,
             json.dumps(analysis, ensure_ascii=False),
-            "HPU Core - Local Rules Engine",
+            engine or analysis.get(
+                "engine_status",
+                "HPU Core"
+            ),
             datetime.now().isoformat(timespec="seconds")
         ))
 
@@ -1331,9 +1540,17 @@ def render_content_studio():
                 objective
             )
 
-            analysis = local_analysis(source_text)
+            
+with st.spinner("HPU and AI engines are analysing the source..."):
 
-            save_analysis(source_id, analysis)
+    analysis, engine_status = run_hybrid_analysis(
+        source_text,
+        objective,
+        audience
+    )
+
+save_analysis(source_id, analysis, engine_status)
+
 
             st.session_state["active_source_id"] = source_id
             st.session_state["active_source_text"] = source_text
@@ -1355,25 +1572,92 @@ def render_content_studio():
 
     analysis = st.session_state["active_analysis"]
 
+    
+st.subheader("Hybrid Intelligence Analysis")
+
+engine_status = analysis.get(
+    "engine_status",
+    "HPU Core"
+)
+
+if engine_status == "Combined HPU + AI":
+    st.success("Both analytical engines completed successfully.")
+
+elif engine_status == "HPU-only fallback":
+    st.warning("AI unavailable. HPU Core provided the analysis.")
+
+elif engine_status == "AI-only fallback":
+    st.warning("HPU Core unavailable. AI provided the analysis.")
+
+else:
+    st.error("Both engines encountered an issue. Safe fallback active.")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.write("**HPU Core**")
+    st.write(
+        "Available" if analysis.get("hpu_available")
+        else "Unavailable"
+    )
+
+with col2:
+    st.write("**AI Engine**")
+    st.write(
+        "Available" if analysis.get("ai_available")
+        else "Unavailable"
+    )
+
+st.divider()
+
+st.subheader("HPU Core Findings")
+
+st.write("**Detected expertise:**", analysis["main_theme"])
+st.write("**Strategic observation:**", analysis["strategic_observation"])
+st.write("**Objective check:**", analysis["objective_check"])
+st.write("**Measurement check:**", analysis["measurement_check"])
+st.write("**Evidence check:**", analysis["evidence_check"])
+
+st.subheader("HPU Recommendations")
+
+for item in analysis["recommendations"]:
+    st.write("•", item)
+
+if analysis.get("ai_available"):
+
     st.divider()
-    st.subheader("HPU Core Analysis")
+    st.subheader("AI Contextual Interpretation")
 
-    st.write("**Detected expertise:**", analysis["main_theme"])
-    st.write("**Strategic observation:**", analysis["strategic_observation"])
-    st.write("**Objective check:**", analysis["objective_check"])
-    st.write("**Measurement check:**", analysis["measurement_check"])
-    st.write("**Evidence check:**", analysis["evidence_check"])
+    st.write(analysis.get("ai_insights", ""))
 
-    if analysis["numbers_in_source"]:
-        st.write(
-            "**Numbers detected in source:**",
-            ", ".join(analysis["numbers_in_source"])
-        )
+    st.write("**AI strategic theme:**")
+    st.write(analysis.get("ai_theme", ""))
 
-    st.subheader("Recommendations")
+    st.subheader("AI Content Opportunities")
 
-    for recommendation in analysis["recommendations"]:
-        st.write("•", recommendation)
+    for item in analysis.get("ai_opportunities", []):
+        st.write("•", item)
+
+    st.subheader("AI Recommendations")
+
+    for item in analysis.get("ai_recommendations", []):
+        st.write("•", item)
+
+    st.subheader("Information Requiring Verification")
+
+    for item in analysis.get("missing_information", []):
+        st.write("•", item)
+
+if analysis.get("comparison"):
+    st.divider()
+    st.subheader("Engine Comparison")
+    st.json(analysis["comparison"])
+
+if analysis.get("numbers_in_source"):
+    st.write(
+        "**Numbers detected in source:**",
+        ", ".join(analysis["numbers_in_source"])
+    )
 
     st.divider()
     st.subheader("Develop Content")
