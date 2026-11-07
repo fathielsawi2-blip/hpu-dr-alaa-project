@@ -26,7 +26,6 @@ st.set_page_config(
 )
 
 DB = "hpu_alaa.db"
-
 TEXT_MODEL = "gpt-4.1-mini"
 IMAGE_MODEL = "gpt-image-1"
 AUDIO_MODEL = "gpt-4o-mini-tts"
@@ -149,9 +148,7 @@ def connect_db():
 
 
 def initialize_database():
-
     with connect_db() as conn:
-
         conn.execute("""
             CREATE TABLE IF NOT EXISTS experiences (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -246,7 +243,7 @@ def initialize_database():
             )
         """)
 
-        # Add missing columns to older versions of the database.
+        # Safe migrations for databases created by earlier app versions.
         migrations = {
             "content": {
                 "source_interview_id": "INTEGER"
@@ -281,7 +278,6 @@ def initialize_database():
         }
 
         for table, columns in migrations.items():
-
             existing = {
                 row[1]
                 for row in conn.execute(
@@ -290,22 +286,19 @@ def initialize_database():
             }
 
             for column, data_type in columns.items():
-
                 if column not in existing:
                     conn.execute(
                         f"ALTER TABLE {table} "
                         f"ADD COLUMN {column} {data_type}"
                     )
 
-        # Insert initial CV reference records once.
+        # Seed the CV knowledge base once, without duplicating records.
         count = conn.execute(
             "SELECT COUNT(*) FROM cv_knowledge"
         ).fetchone()[0]
 
         if count == 0:
-
             for item in CV_KNOWLEDGE:
-
                 conn.execute("""
                     INSERT INTO cv_knowledge
                     (category, title, details, source, created_at)
@@ -323,7 +316,6 @@ initialize_database()
 
 
 def read_table(table):
-
     allowed = [
         "experiences",
         "content",
@@ -346,7 +338,6 @@ def read_table(table):
 
 
 def get_cv_context():
-
     cv = read_table("cv_knowledge")
 
     if cv.empty:
@@ -363,13 +354,10 @@ def get_cv_context():
 # ============================================================
 
 def get_openai_key():
-
     try:
         key = st.secrets.get("OPENAI_API_KEY", "")
-
         if key:
             return key
-
     except Exception:
         pass
 
@@ -377,7 +365,6 @@ def get_openai_key():
 
 
 def get_openai_client():
-
     key = get_openai_key()
 
     if not key or OpenAI is None:
@@ -404,13 +391,23 @@ def generate_text_with_ai(client, prompt):
 
 
 def generate_ai_analysis(client, source_text, goal, audience):
-    """AI analysis engine. Independent from HPU Core."""
-
+    """Optional AI analysis engine, independent from HPU Core."""
     if client is None:
         raise RuntimeError("AI engine unavailable.")
 
+    cv_context = get_cv_context()
+
     prompt = f"""
-Analyse the following professional source material.
+You are the optional contextual analysis engine within HPU.
+
+Analyse the professional source material below. Use the CV reference
+knowledge only as context. Do not assume every CV item relates to this
+source. Never invent facts, achievements, dates, statistics or outcomes.
+Clearly distinguish source facts from interpretation and identify
+information that requires verification.
+
+VERIFIED CV REFERENCE CONTEXT:
+{cv_context}
 
 SOURCE:
 {source_text}
@@ -421,20 +418,15 @@ OBJECTIVE:
 TARGET AUDIENCE:
 {audience}
 
-Return valid JSON only:
-
+Return valid JSON only, using exactly these keys:
 {{
-    "main_theme": "Main strategic theme",
-    "contextual_insight": "Deeper interpretation",
-    "content_opportunities": ["Opportunity 1", "Opportunity 2"],
-    "strategic_recommendations": ["Recommendation 1", "Recommendation 2"],
-    "missing_information": ["Information requiring verification"],
-    "potential_audiences": ["Relevant audience"]
+  "main_theme": "Main strategic theme",
+  "contextual_insight": "Deeper interpretation",
+  "content_opportunities": ["Opportunity 1", "Opportunity 2"],
+  "strategic_recommendations": ["Recommendation 1", "Recommendation 2"],
+  "missing_information": ["Information requiring verification"],
+  "potential_audiences": ["Relevant audience"]
 }}
-
-Never invent facts, achievements or statistics.
-Distinguish facts from interpretation.
-Identify missing evidence.
 """
 
     response = client.responses.create(
@@ -443,196 +435,15 @@ Identify missing evidence.
     )
 
     raw = response.output_text.strip()
-    raw = re.sub(r"^```json\s*", "", raw)
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
     raw = re.sub(r"\s*```$", "", raw)
 
     result = json.loads(raw)
 
     if not isinstance(result, dict):
-        raise ValueError("Invalid AI analysis.")
+        raise ValueError("AI returned an invalid analysis format.")
 
     return result
-
-def run_hybrid_analysis(source_text, goal, audience):
-    """
-    Runs HPU and AI independently.
-    Either engine can provide a result if the other fails.
-    """
-
-    hpu_result = None
-    ai_result = None
-
-    hpu_error = None
-    ai_error = None
-
-    # ENGINE 1: HPU CORE
-    try:
-        hpu_result = local_analysis(source_text)
-    except Exception as error:
-        hpu_error = str(error)
-
-    # ENGINE 2: AI
-    try:
-        client = get_openai_client()
-
-        if client is None:
-            raise RuntimeError("AI connection unavailable.")
-
-        ai_result = generate_ai_analysis(
-            client,
-            source_text,
-            goal,
-            audience
-        )
-
-    except Exception as error:
-        ai_error = str(error)
-
-    # BOOLEAN ORCHESTRATION
-    hpu_ok = hpu_result is not None
-    ai_ok = ai_result is not None
-
-    if hpu_ok and ai_ok:
-        engine = "Combined HPU + AI"
-
-    elif hpu_ok:
-        engine = "HPU-only fallback"
-
-    elif ai_ok:
-        engine = "AI-only fallback"
-
-    else:
-        engine = "Safe fallback"
-
-    # Preserve the existing HPU result structure.
-    result = hpu_result or {
-        "status": "Partial analysis",
-        "detected_expertise": ["Requires further classification"],
-        "main_theme": "Requires further analysis",
-        "objective_check": "Not assessed",
-        "measurement_check": "Not assessed",
-        "evidence_check": "Not assessed",
-        "strategic_observation": (
-            "The HPU Core could not complete its analysis."
-        ),
-        "recommendations": [
-            "Review the source material and try again."
-        ],
-        "numbers_in_source": [],
-        "source_length": len(source_text),
-        "analysis_engine": "AI fallback"
-    }
-
-    # Attach independent engine results.
-    result["engine_status"] = engine
-    result["hpu_available"] = hpu_ok
-    result["ai_available"] = ai_ok
-    result["hpu_error"] = hpu_error
-    result["ai_error"] = ai_error
-
-    result["ai_insights"] = (
-        ai_result.get("contextual_insight", "")
-        if ai_ok else ""
-    )
-
-    result["ai_theme"] = (
-        ai_result.get("main_theme", "")
-        if ai_ok else ""
-    )
-
-    result["ai_opportunities"] = (
-        ai_result.get("content_opportunities", [])
-        if ai_ok else []
-    )
-
-    result["ai_recommendations"] = (
-        ai_result.get("strategic_recommendations", [])
-        if ai_ok else []
-    )
-
-    result["missing_information"] = (
-        ai_result.get("missing_information", [])
-        if ai_ok else []
-    )
-
-    # Identify areas where the engines agree or differ.
-    if hpu_ok and ai_ok:
-
-        hpu_themes = {
-            item.lower()
-            for item in hpu_result.get("detected_expertise", [])
-        }
-
-        ai_theme = str(
-            ai_result.get("main_theme", "")
-        ).lower()
-
-        result["comparison"] = {
-            "both_engines_completed": True,
-            "hpu_themes": hpu_result.get(
-                "detected_expertise", []
-            ),
-            "ai_theme": ai_result.get("main_theme", ""),
-            "requires_human_review": True
-        }
-
-    else:
-
-        result["comparison"] = {
-            "both_engines_completed": False,
-            "requires_human_review": True
-        }
-
-    result["analysis_engine"] = engine
-
-    return result, engine
-
-
-    if client is None:
-        raise RuntimeError("OpenAI is not configured.")
-
-    response = client.responses.create(
-        model=TEXT_MODEL,
-        instructions=(
-            "You are the optional writing enhancement layer of HPU. "
-            "Improve clarity, structure and professional quality. "
-            "Never invent facts, achievements, statistics or experience. "
-            "Preserve the source meaning and distinguish verified facts "
-            "from interpretation."
-        ),
-        input=prompt
-    )
-
-    return response.output_text
-
-
-def generate_actual_image(client, prompt):
-
-    if client is None:
-        raise RuntimeError("OpenAI is not configured.")
-
-    result = client.images.generate(
-        model=IMAGE_MODEL,
-        prompt=prompt,
-        size="1024x1024"
-    )
-
-    return base64.b64decode(result.data[0].b64_json)
-
-
-def generate_actual_audio(client, narration, voice="alloy"):
-
-    if client is None:
-        raise RuntimeError("OpenAI is not configured.")
-
-    result = client.audio.speech.create(
-        model=AUDIO_MODEL,
-        voice=voice,
-        input=narration,
-        response_format="mp3"
-    )
-
-    return result.read()
 
 
 # ============================================================
@@ -676,10 +487,10 @@ EXPERTISE_MAP = {
         "baseline",
         "performance",
         "kpi",
-        "القياس",
         "خط الأساس",
         "الأداء",
-        "مؤشرات الأداء"
+        "مؤشرات الأداء",
+        "القياس"
     ],
     "Stakeholder Engagement": [
         "stakeholder",
@@ -701,14 +512,12 @@ EXPERTISE_MAP = {
 
 
 def local_analysis(source_text):
-
-    text = source_text.strip()
+    """Deterministic local analysis. Does not require an AI connection."""
+    text = (source_text or "").strip()
     lower = text.lower()
 
     detected = []
-
     for category, keywords in EXPERTISE_MAP.items():
-
         if any(word in lower for word in keywords):
             detected.append(category)
 
@@ -737,7 +546,7 @@ def local_analysis(source_text):
 
     numbers = re.findall(
         r"\b\d+(?:\.\d+)?\s*%?\b",
-        source_text
+        text
     )
 
     recommendations = []
@@ -763,31 +572,24 @@ def local_analysis(source_text):
         )
 
     if has_objective and not has_measurement:
-
         observation = (
-            "An objective appears in the source, but measurement "
-            "needs further development. Define a baseline and select "
-            "indicators that can assess progress."
+            "An objective appears in the source, but measurement needs "
+            "further development. Define a baseline and select indicators "
+            "that can assess progress."
         )
-
     elif has_measurement and not has_objective:
-
         observation = (
-            "Measurement concepts appear in the source. However, "
-            "the indicators should be connected to a clearly defined "
+            "Measurement concepts appear in the source. However, the "
+            "indicators should be connected to a clearly defined "
             "communication objective."
         )
-
     elif has_objective and has_measurement:
-
         observation = (
             "The source includes objective and measurement concepts. "
             "The next step is to check whether the indicators genuinely "
             "demonstrate the intended outcome."
         )
-
     else:
-
         observation = (
             "The source contains professional material that can be "
             "developed into a strategic insight. Clarify the problem, "
@@ -821,8 +623,148 @@ def local_analysis(source_text):
     }
 
 
-def select_content_angle(analysis, objective):
+def run_hybrid_analysis(source_text, goal, audience):
+    """
+    Run HPU Core and AI independently.
+    If either engine fails, the other can still provide its result.
+    """
+    hpu_result = None
+    ai_result = None
+    hpu_error = None
+    ai_error = None
 
+    # Engine 1: independent local HPU Core.
+    try:
+        hpu_result = local_analysis(source_text)
+    except Exception as error:
+        hpu_error = str(error)
+
+    # Engine 2: optional AI analysis.
+    try:
+        client = get_openai_client()
+        if client is None:
+            raise RuntimeError("AI connection unavailable.")
+
+        ai_result = generate_ai_analysis(
+            client,
+            source_text,
+            goal,
+            audience
+        )
+    except Exception as error:
+        ai_error = str(error)
+
+    hpu_ok = hpu_result is not None
+    ai_ok = ai_result is not None
+
+    # Boolean orchestration.
+    if hpu_ok and ai_ok:
+        engine = "Combined HPU + AI"
+    elif hpu_ok:
+        engine = "HPU-only fallback"
+    elif ai_ok:
+        engine = "AI-only fallback"
+    else:
+        engine = "Safe fallback"
+
+    # Keep a consistent result structure even if both engines fail.
+    result = hpu_result or {
+        "status": "Partial analysis",
+        "detected_expertise": ["Requires further classification"],
+        "main_theme": "Requires further analysis",
+        "objective_check": "Not assessed",
+        "measurement_check": "Not assessed",
+        "evidence_check": "Not assessed",
+        "strategic_observation": (
+            "The HPU Core could not complete its analysis."
+        ),
+        "recommendations": [
+            "Review the source material and try again."
+        ],
+        "numbers_in_source": [],
+        "source_length": len(source_text or ""),
+        "analysis_engine": "Fallback"
+    }
+
+    result["engine_status"] = engine
+    result["hpu_available"] = hpu_ok
+    result["ai_available"] = ai_ok
+    result["hpu_error"] = hpu_error
+    result["ai_error"] = ai_error
+
+    result["ai_insights"] = (
+        ai_result.get("contextual_insight", "") if ai_ok else ""
+    )
+    result["ai_theme"] = (
+        ai_result.get("main_theme", "") if ai_ok else ""
+    )
+    result["ai_opportunities"] = (
+        ai_result.get("content_opportunities", []) if ai_ok else []
+    )
+    result["ai_recommendations"] = (
+        ai_result.get("strategic_recommendations", []) if ai_ok else []
+    )
+    result["missing_information"] = (
+        ai_result.get("missing_information", []) if ai_ok else []
+    )
+    result["potential_audiences"] = (
+        ai_result.get("potential_audiences", []) if ai_ok else []
+    )
+
+    # Report engine outputs side by side; human review remains necessary.
+    if hpu_ok and ai_ok:
+        result["comparison"] = {
+            "both_engines_completed": True,
+            "hpu_themes": hpu_result.get("detected_expertise", []),
+            "ai_theme": ai_result.get("main_theme", ""),
+            "requires_human_review": True
+        }
+    else:
+        result["comparison"] = {
+            "both_engines_completed": False,
+            "requires_human_review": True
+        }
+
+    result["analysis_engine"] = engine
+    return result, engine
+
+
+# ============================================================
+# 5. OPTIONAL GENERATION SERVICES
+# ============================================================
+
+def generate_actual_image(client, prompt):
+    if client is None:
+        raise RuntimeError("OpenAI is not configured.")
+
+    result = client.images.generate(
+        model=IMAGE_MODEL,
+        prompt=prompt,
+        size="1024x1024"
+    )
+
+    return base64.b64decode(result.data[0].b64_json)
+
+
+def generate_actual_audio(client, narration, voice="alloy"):
+    if client is None:
+        raise RuntimeError("OpenAI is not configured.")
+
+    result = client.audio.speech.create(
+        model=AUDIO_MODEL,
+        voice=voice,
+        input=narration,
+        response_format="mp3"
+    )
+
+    return result.read()
+
+
+# ============================================================
+# 6. LOCAL CONTENT GENERATION
+# ============================================================
+
+def select_content_angle(analysis, objective):
     themes = analysis.get("detected_expertise", [])
 
     if (
@@ -846,49 +788,35 @@ def select_content_angle(analysis, objective):
     return "Practical communication insight"
 
 
-def generate_local_post(
-    source,
-    audience,
-    language,
-    tone,
-    objective,
-    analysis
-):
-
+def generate_local_post(source, audience, language, tone, objective, analysis):
     angle = select_content_angle(analysis, objective)
 
     if language == "Arabic":
-
         return f"""**{source}**
 
-في الممارسة المهنية، لا يكفي أن ننفذ الأنشطة
-الاتصالية أو نزيد من حجم المحتوى المنشور.
+في الممارسة المهنية، لا يكفي أن ننفذ الأنشطة الاتصالية أو نزيد من حجم المحتوى المنشور.
 
-الأهم هو أن نفهم المشكلة التي نحاول معالجتها،
-والهدف الذي نسعى إلى تحقيقه، والتغيير الذي نريد أن نراه.
+الأهم هو أن نفهم المشكلة التي نحاول معالجتها، والهدف الذي نسعى إلى تحقيقه، والتغيير الذي نريد أن نراه.
 
 من هنا تظهر أهمية التفكير الاتصالي الاستراتيجي:
 أن نربط كل نشاط اتصالي بهدف واضح،
 وأن نحدد نقطة البداية قبل تقييم الأداء،
 وأن نختار مؤشرات تعكس النتائج لا مجرد حجم النشاط.
 
-**التواصل الفعّال ليس مجرد نشاط يُنفذ،
-بل عملية هادفة يمكن قياس أثرها.**
+التواصل الفعّال ليس مجرد نشاط يُنفذ،
+بل عملية هادفة يمكن قياس أثرها.
 
 زاوية المعالجة: {angle}
-
 الجمهور المستهدف: {audience}
-
 الهدف: {objective}
+النبرة: {tone}
 
 #التواصل_الاستراتيجي #الاتصال_المؤسسي #قياس_الأثر
 """
 
     return f"""**{source}**
 
-In professional practice, communication success cannot
-be determined simply by the volume of activities
-or the amount of content published.
+In professional practice, communication success cannot be determined simply by the volume of activities or the amount of content published.
 
 The more important questions are:
 
@@ -896,115 +824,75 @@ What problem are we addressing?
 What objective are we pursuing?
 What change do we want to achieve?
 
-Strategic communication connects activities
-to a clear purpose, establishes a starting point
-and selects indicators that reflect meaningful results.
+Strategic communication connects activities to a clear purpose, establishes a starting point and selects indicators that reflect meaningful results.
 
-**Effective communication is not simply an activity.
-It is a purposeful process whose impact can be assessed.**
+Effective communication is not simply an activity. It is a purposeful process whose impact can be assessed.
 
 Content angle: {angle}
-
 Target audience: {audience}
-
 Objective: {objective}
+Tone: {tone}
 
 #StrategicCommunication #CorporateCommunication #ImpactMeasurement
 """
 
 
 def generate_local_article(source, audience, language, objective, analysis):
-
     angle = select_content_angle(analysis, objective)
 
     if language == "Arabic":
-
         return f"""# {source}
 
 ## مقدمة
-
-يمثل هذا المفهوم مدخلاً مهماً لفهم التحديات التي تواجه
-ممارسات التواصل المؤسسي والاستراتيجي.
+يمثل هذا المفهوم مدخلاً مهماً لفهم التحديات التي تواجه ممارسات التواصل المؤسسي والاستراتيجي.
 
 ## فهم المشكلة
-
-كثيراً ما تنشغل المؤسسات بتنفيذ الأنشطة دون أن تربطها
-بصورة واضحة بالهدف المطلوب تحقيقه.
+كثيراً ما تنشغل المؤسسات بتنفيذ الأنشطة دون أن تربطها بصورة واضحة بالهدف المطلوب تحقيقه.
 
 ## أهمية الهدف
-
-يحتاج كل نشاط اتصالي إلى هدف واضح يحدد ما الذي
-تريد المؤسسة تحقيقه ولماذا.
+يحتاج كل نشاط اتصالي إلى هدف واضح يحدد ما الذي تريد المؤسسة تحقيقه ولماذا.
 
 ## خط الأساس والقياس
-
-لا يمكن تقييم التغيير بصورة دقيقة دون معرفة
-الوضع الذي بدأت منه المؤسسة.
+لا يمكن تقييم التغيير بصورة دقيقة دون معرفة الوضع الذي بدأت منه المؤسسة.
 
 ## من النشاط إلى الأثر
-
-يجب أن تتجاوز عملية التقييم عدّ الأنشطة
-إلى فهم النتائج والتغيرات التي تحققت.
+يجب أن تتجاوز عملية التقييم عدّ الأنشطة إلى فهم النتائج والتغيرات التي تحققت.
 
 ## خاتمة
-
-إن تطوير ممارسات التواصل يبدأ من الانتقال
-من تنفيذ الأنشطة إلى إدارة عملية اتصالية
-مرتبطة بهدف ومؤشرات ونتائج واضحة.
+إن تطوير ممارسات التواصل يبدأ من الانتقال من تنفيذ الأنشطة إلى إدارة عملية اتصالية مرتبطة بهدف ومؤشرات ونتائج واضحة.
 
 زاوية المعالجة: {angle}
-
 الجمهور: {audience}
-
 الهدف: {objective}
 """
 
     return f"""# {source}
 
 ## Introduction
-
-This concept provides an important starting point
-for understanding the challenges facing strategic
-and corporate communication practice.
+This concept provides an important starting point for understanding the challenges facing strategic and corporate communication practice.
 
 ## Understanding the Problem
-
-Organizations can become focused on activities
-without connecting those activities to the results
-they are expected to achieve.
+Organizations can become focused on activities without connecting those activities to the results they are expected to achieve.
 
 ## The Importance of Objectives
-
-Every communication activity should have a clear purpose.
-An objective explains what the organization wants
-to achieve and why.
+Every communication activity should have a clear purpose. An objective explains what the organization wants to achieve and why.
 
 ## Baselines and Measurement
-
-Performance assessment requires an understanding
-of the starting position.
+Performance assessment requires an understanding of the starting position.
 
 ## Moving from Activity to Impact
-
-Evaluation should go beyond counting activities.
-It should examine the outcomes and changes achieved.
+Evaluation should go beyond counting activities. It should examine the outcomes and changes achieved.
 
 ## Conclusion
-
-Better communication practice connects activities
-with clear objectives, relevant indicators
-and demonstrable outcomes.
+Better communication practice connects activities with clear objectives, relevant indicators and demonstrable outcomes.
 
 Content angle: {angle}
-
 Audience: {audience}
-
 Objective: {objective}
 """
 
 
 def generate_visual_brief(source, audience, language, analysis):
-
     angle = select_content_angle(analysis, "Professional awareness")
 
     return f"""VISUAL CONTENT BRIEF
@@ -1036,29 +924,22 @@ Do not introduce unsupported statistics or claims.
 
 
 def generate_audio_script(source, language, audience):
-
     if language == "Arabic":
-
         return f"""النص المقترح للتعليق الصوتي
 
 {source}
 
-في كثير من المؤسسات، يتم التركيز على الأنشطة
-الاتصالية وما يتم إنتاجه ونشره.
+في كثير من المؤسسات، يتم التركيز على الأنشطة الاتصالية وما يتم إنتاجه ونشره.
 
 لكن السؤال الأهم هو:
 ما الهدف الذي نريد تحقيقه؟
-
 وكيف يمكننا معرفة ما إذا كنا قد حققناه؟
 
-يبدأ التواصل الاستراتيجي من فهم المشكلة،
-وتحديد الهدف، ومعرفة نقطة البداية.
+يبدأ التواصل الاستراتيجي من فهم المشكلة، وتحديد الهدف، ومعرفة نقطة البداية.
 
-ثم نختار مؤشرات تساعدنا على قياس النتائج
-والتغيير الذي تحقق.
+ثم نختار مؤشرات تساعدنا على قياس النتائج والتغيير الذي تحقق.
 
-التواصل ليس مجرد نشر للمعلومات،
-بل عملية استراتيجية تهدف إلى تحقيق أثر واضح.
+التواصل ليس مجرد نشر للمعلومات، بل عملية استراتيجية تهدف إلى تحقيق أثر واضح.
 
 الجمهور المستهدف: {audience}
 """
@@ -1067,38 +948,29 @@ def generate_audio_script(source, language, audience):
 
 {source}
 
-Many organizations focus on communication activities
-and the amount of content they produce and publish.
+Many organizations focus on communication activities and the amount of content they produce and publish.
 
 But the more important question is:
 What are we trying to achieve?
-
 And how will we know whether we achieved it?
 
-Strategic communication begins by understanding
-the problem, defining the objective
-and identifying the starting point.
+Strategic communication begins by understanding the problem, defining the objective and identifying the starting point.
 
-We then select indicators that help measure
-the results and the change achieved.
+We then select indicators that help measure the results and the change achieved.
 
-Communication is not simply the distribution
-of information. It is a strategic process
-designed to create meaningful impact.
+Communication is not simply the distribution of information. It is a strategic process designed to create meaningful impact.
 
 Target audience: {audience}
 """
 
 
 # ============================================================
-# 5. DATABASE SAVE HELPERS
+# 7. DATABASE SAVE HELPERS
 # ============================================================
 
 def save_source(title, source_type, raw_text, audience,
                 platform, language, tone, objective):
-
     with connect_db() as conn:
-
         cursor = conn.execute("""
             INSERT INTO source_materials
             (title, source_type, raw_text, audience, platform,
@@ -1115,15 +987,11 @@ def save_source(title, source_type, raw_text, audience,
             objective,
             datetime.now().isoformat(timespec="seconds")
         ))
-
         return cursor.lastrowid
 
 
-
 def save_analysis(source_id, analysis, engine=None):
-
     with connect_db() as conn:
-
         conn.execute("""
             INSERT INTO analysis_records
             (source_id, analysis_json, engine, created_at)
@@ -1131,19 +999,14 @@ def save_analysis(source_id, analysis, engine=None):
         """, (
             source_id,
             json.dumps(analysis, ensure_ascii=False),
-            engine or analysis.get(
-                "engine_status",
-                "HPU Core"
-            ),
+            engine or analysis.get("engine_status", "HPU Core"),
             datetime.now().isoformat(timespec="seconds")
         ))
 
 
 def save_asset(source_id, asset_type, title, content,
                file_data=None, file_name=None):
-
     with connect_db() as conn:
-
         conn.execute("""
             INSERT INTO generated_assets
             (source_id, asset_type, title, content,
@@ -1162,11 +1025,10 @@ def save_asset(source_id, asset_type, title, content,
 
 
 # ============================================================
-# 6. DASHBOARD
+# 8. DASHBOARD
 # ============================================================
 
 def render_dashboard():
-
     st.title("Dr. Alaa Zahran")
     st.subheader("Personal Brand Intelligence Platform")
 
@@ -1178,7 +1040,6 @@ def render_dashboard():
     analyses = read_table("analysis_records")
 
     columns = st.columns(5)
-
     columns[0].metric("CV Records", len(cv))
     columns[1].metric("Experiences", len(experiences))
     columns[2].metric("Interviews", len(interviews))
@@ -1186,41 +1047,34 @@ def render_dashboard():
     columns[4].metric("Generated Assets", len(assets))
 
     st.divider()
-
     st.subheader("HPU Processing Workflow")
-
     st.write(
         "Professional Knowledge → Source Analysis → "
         "Experience Matching → Content Strategy → "
         "Content Development → Review → Measurement"
     )
 
-    st.metric("Local Analysis Records", len(analyses))
-
+    st.metric("Analysis Records", len(analyses))
     st.info(
-        "HPU Core analysis and local content generation work "
-        "without an OpenAI API key. OpenAI is an optional enhancement."
+        "HPU Core analysis and local content generation work without "
+        "an OpenAI API key. OpenAI is an optional enhancement."
     )
 
 
 # ============================================================
-# 7. CV KNOWLEDGE BASE
+# 9. CV KNOWLEDGE BASE
 # ============================================================
 
 def render_cv_knowledge():
-
     st.title("CV Knowledge Base")
 
     cv = read_table("cv_knowledge")
-
     st.metric("Knowledge Records", len(cv))
 
     if not cv.empty:
-
         categories = ["All"] + sorted(
             cv["category"].dropna().unique().tolist()
         )
-
         selected = st.selectbox("Filter category", categories)
 
         view = (
@@ -1229,7 +1083,6 @@ def render_cv_knowledge():
         )
 
         for _, item in view.iterrows():
-
             with st.expander(
                 f"{item['category']} | {item['title']}"
             ):
@@ -1240,19 +1093,14 @@ def render_cv_knowledge():
     st.subheader("Add professional knowledge")
 
     with st.form("cv_form"):
-
         category = st.text_input("Category")
         title = st.text_input("Title")
         details = st.text_area("Details", height=130)
-
         submitted = st.form_submit_button("Save Knowledge")
 
     if submitted:
-
         if category.strip() and title.strip() and details.strip():
-
             with connect_db() as conn:
-
                 conn.execute("""
                     INSERT INTO cv_knowledge
                     (category, title, details, source, created_at)
@@ -1267,37 +1115,29 @@ def render_cv_knowledge():
 
             st.success("Knowledge record saved.")
             st.rerun()
-
         else:
             st.warning("Complete all fields.")
 
 
 # ============================================================
-# 8. PROFESSIONAL EXPERIENCES
+# 10. PROFESSIONAL EXPERIENCES
 # ============================================================
 
 def render_experiences():
-
     st.title("Professional Experience Database")
 
     with st.form("experience_form"):
-
         title = st.text_input("Experience title")
         description = st.text_area("Description", height=150)
-
         expertise = st.selectbox(
             "Professional area",
             list(EXPERTISE_MAP.keys())
         )
-
         submitted = st.form_submit_button("Save Experience")
 
     if submitted:
-
         if title.strip() and description.strip():
-
             with connect_db() as conn:
-
                 conn.execute("""
                     INSERT INTO experiences
                     (title, description, expertise, date_added)
@@ -1311,7 +1151,6 @@ def render_experiences():
 
             st.success("Experience saved.")
             st.rerun()
-
         else:
             st.warning("Complete the title and description.")
 
@@ -1324,11 +1163,10 @@ def render_experiences():
 
 
 # ============================================================
-# 9. INTERVIEW CAPTURE
+# 11. INTERVIEW CAPTURE
 # ============================================================
 
 def render_interviews():
-
     st.title("Professional Interview Capture")
 
     questions = {
@@ -1363,25 +1201,19 @@ def render_interviews():
         "Interview category",
         list(questions.keys())
     )
-
     question = st.selectbox(
         "Interview question",
         questions[category]
     )
-
     answer = st.text_area("Interview answer", height=220)
 
     if st.button("Save Interview Answer"):
-
         if len(answer.strip()) < 10:
             st.warning("Please enter a more complete answer.")
-
         else:
-
             analysis = local_analysis(answer)
 
             with connect_db() as conn:
-
                 conn.execute("""
                     INSERT INTO interviews
                     (question, answer, analysis, created_at)
@@ -1398,7 +1230,6 @@ def render_interviews():
             st.json(analysis)
 
     st.divider()
-
     records = read_table("interviews")
 
     if records.empty:
@@ -1412,16 +1243,14 @@ def render_interviews():
 
 
 # ============================================================
-# 10. CONTENT INTELLIGENCE STUDIO
+# 12. CONTENT INTELLIGENCE STUDIO
 # ============================================================
 
 def render_content_studio():
-
     st.title("Content Intelligence Studio")
-
     st.caption(
-        "Analyse source material independently, then develop "
-        "content using HPU Core. OpenAI is optional."
+        "Analyse source material independently, then develop content "
+        "using HPU Core. OpenAI is optional."
     )
 
     client = get_openai_client()
@@ -1430,12 +1259,11 @@ def render_content_studio():
         st.success("Optional OpenAI enhancement is configured.")
     else:
         st.info(
-            "OpenAI is not connected. HPU Core local analysis "
-            "and content generation remain available."
+            "OpenAI is not connected. HPU Core local analysis and "
+            "content generation remain available."
         )
 
     with st.form("source_form"):
-
         title = st.text_input("Source title")
 
         source_type = st.selectbox(
@@ -1460,7 +1288,6 @@ def render_content_studio():
         col1, col2 = st.columns(2)
 
         with col1:
-
             audience = st.selectbox(
                 "Target audience",
                 [
@@ -1484,7 +1311,6 @@ def render_content_studio():
             )
 
         with col2:
-
             tone = st.selectbox(
                 "Tone",
                 [
@@ -1514,13 +1340,9 @@ def render_content_studio():
         )
 
     if submitted:
-
         if not title.strip() or not source_text.strip():
-
             st.warning("Enter both a title and source material.")
-
         else:
-
             source_id = save_source(
                 title,
                 source_type,
@@ -1532,7 +1354,6 @@ def render_content_studio():
                 objective
             )
 
-            
             with st.spinner("HPU and AI engines are analysing the source..."):
                 analysis, engine_status = run_hybrid_analysis(
                     source_text,
@@ -1552,6 +1373,12 @@ def render_content_studio():
             st.session_state["active_objective"] = objective
             st.session_state["active_analysis"] = analysis
 
+            # A new source should not display old generated assets.
+            st.session_state.pop("generated_text", None)
+            st.session_state.pop("enhanced_text", None)
+            st.session_state.pop("hpu_image", None)
+            st.session_state.pop("hpu_audio", None)
+
             st.success(
                 f"Source saved and analysed. Reference #{source_id}."
             )
@@ -1563,22 +1390,18 @@ def render_content_studio():
     analysis = st.session_state["active_analysis"]
 
     st.subheader("Hybrid Intelligence Analysis")
-
     engine_status = analysis.get("engine_status", "HPU Core")
 
     if engine_status == "Combined HPU + AI":
         st.success("Both analytical engines completed successfully.")
-
     elif engine_status == "HPU-only fallback":
         st.warning("AI unavailable. HPU Core provided the analysis.")
-
     elif engine_status == "AI-only fallback":
         st.warning("HPU Core unavailable. AI provided the analysis.")
-
     else:
         st.error("Both engines encountered an issue. Safe fallback active.")
 
-    # ENGINE STATUS
+    # Engine status indicators.
     col1, col2 = st.columns(2)
 
     with col1:
@@ -1595,10 +1418,9 @@ def render_content_studio():
         else:
             st.warning("Unavailable")
 
-    # HPU CORE FINDINGS
+    # HPU findings.
     st.divider()
     st.subheader("HPU Core Findings")
-
     st.write("**Detected expertise:**")
     st.write(analysis.get("main_theme", "Not identified"))
 
@@ -1614,18 +1436,14 @@ def render_content_studio():
     st.write("**Evidence check:**")
     st.write(analysis.get("evidence_check", "Not assessed"))
 
-    # HPU RECOMMENDATIONS
     st.subheader("HPU Recommendations")
-
     for item in analysis.get("recommendations", []):
         st.write("•", item)
 
-    # AI ANALYSIS
+    # AI findings.
     if analysis.get("ai_available"):
-
         st.divider()
         st.subheader("AI Contextual Interpretation")
-
         st.write(
             analysis.get("ai_insights", "No contextual insight available.")
         )
@@ -1634,96 +1452,40 @@ def render_content_studio():
         st.write(analysis.get("ai_theme", "Not identified"))
 
         st.subheader("AI Content Opportunities")
-
         for item in analysis.get("ai_opportunities", []):
             st.write("•", item)
 
         st.subheader("AI Strategic Recommendations")
-
         for item in analysis.get("ai_recommendations", []):
             st.write("•", item)
 
         st.subheader("Information Requiring Verification")
+        missing = analysis.get("missing_information", [])
+        if missing:
+            for item in missing:
+                st.write("•", item)
+        else:
+            st.write("No additional missing information was identified by AI.")
 
-        for item in analysis.get("missing_information", []):
-            st.write("•", item)
-
-    # ENGINE COMPARISON
-    if analysis.get("comparison"):
-
+    # Engine comparison.
+    comparison = analysis.get("comparison")
+    if comparison:
         st.divider()
         st.subheader("Engine Comparison")
+        st.json(comparison)
 
-        st.json(analysis["comparison"])
-
-    # SOURCE DATA
-    if analysis.get("numbers_in_source"):
-
+    numbers = analysis.get("numbers_in_source", [])
+    if numbers:
         st.write(
             "**Numbers detected in source:**",
-            ", ".join(
-                str(number)
-                for number in analysis["numbers_in_source"]
-            )
+            ", ".join(str(number) for number in numbers)
         )
 
-    # DIAGNOSTICS
     with st.expander("Engine diagnostics"):
-
         st.write("HPU error:", analysis.get("hpu_error"))
         st.write("AI error:", analysis.get("ai_error"))
 
-st.divider()
-
-st.subheader("HPU Core Findings")
-
-st.write("**Detected expertise:**", analysis["main_theme"])
-st.write("**Strategic observation:**", analysis["strategic_observation"])
-st.write("**Objective check:**", analysis["objective_check"])
-st.write("**Measurement check:**", analysis["measurement_check"])
-st.write("**Evidence check:**", analysis["evidence_check"])
-
-st.subheader("HPU Recommendations")
-
-for item in analysis["recommendations"]:
-    st.write("•", item)
-
-if analysis.get("ai_available"):
-
-    st.divider()
-    st.subheader("AI Contextual Interpretation")
-
-    st.write(analysis.get("ai_insights", ""))
-
-    st.write("**AI strategic theme:**")
-    st.write(analysis.get("ai_theme", ""))
-
-    st.subheader("AI Content Opportunities")
-
-    for item in analysis.get("ai_opportunities", []):
-        st.write("•", item)
-
-    st.subheader("AI Recommendations")
-
-    for item in analysis.get("ai_recommendations", []):
-        st.write("•", item)
-
-    st.subheader("Information Requiring Verification")
-
-    for item in analysis.get("missing_information", []):
-        st.write("•", item)
-
-if analysis.get("comparison"):
-    st.divider()
-    st.subheader("Engine Comparison")
-    st.json(analysis["comparison"])
-
-if analysis.get("numbers_in_source"):
-    st.write(
-        "**Numbers detected in source:**",
-        ", ".join(analysis["numbers_in_source"])
-    )
-
+    # Content development is always available after a source is analysed.
     st.divider()
     st.subheader("Develop Content")
 
@@ -1734,46 +1496,53 @@ if analysis.get("numbers_in_source"):
             "Professional Article",
             "Visual Brief",
             "Audio Script"
-        ]
+        ],
+        key="asset_type_selector"
     )
 
     if st.button("Generate with HPU Core", type="primary"):
-
         source = st.session_state["active_source_text"]
-        audience = st.session_state["active_audience"]
-        language = st.session_state["active_language"]
-        tone = st.session_state["active_tone"]
-        objective = st.session_state["active_objective"]
+        current_audience = st.session_state["active_audience"]
+        current_language = st.session_state["active_language"]
+        current_tone = st.session_state["active_tone"]
+        current_objective = st.session_state["active_objective"]
 
         if asset_type == "LinkedIn Post":
-
             generated = generate_local_post(
-                source, audience, language, tone, objective, analysis
+                source,
+                current_audience,
+                current_language,
+                current_tone,
+                current_objective,
+                analysis
             )
-
         elif asset_type == "Professional Article":
-
             generated = generate_local_article(
-                source, audience, language, objective, analysis
+                source,
+                current_audience,
+                current_language,
+                current_objective,
+                analysis
             )
-
         elif asset_type == "Visual Brief":
-
             generated = generate_visual_brief(
-                source, audience, language, analysis
+                source,
+                current_audience,
+                current_language,
+                analysis
             )
-
         else:
-
             generated = generate_audio_script(
-                source, language, audience
+                source,
+                current_language,
+                current_audience
             )
 
         st.session_state["generated_text"] = generated
         st.session_state["generated_type"] = asset_type
+        st.session_state.pop("enhanced_text", None)
 
     if "generated_text" in st.session_state:
-
         st.divider()
         st.subheader("Generated Draft")
 
@@ -1785,14 +1554,12 @@ if analysis.get("numbers_in_source"):
         )
 
         if st.button("Save Generated Asset"):
-
             save_asset(
                 st.session_state["active_source_id"],
                 st.session_state["generated_type"],
                 st.session_state["active_source_title"],
                 edited
             )
-
             st.success("Generated asset saved.")
 
         st.download_button(
@@ -1806,14 +1573,11 @@ if analysis.get("numbers_in_source"):
         st.subheader("Optional OpenAI Enhancement")
 
         if client is None:
-
             st.info(
                 "Connect OpenAI in Streamlit Secrets to use this "
                 "optional writing enhancement."
             )
-
         elif st.button("Enhance Draft with OpenAI"):
-
             prompt = f"""
 Improve this HPU Core draft.
 
@@ -1835,26 +1599,23 @@ Language:
 Preserve the meaning. Do not invent facts or achievements.
 Return the improved content only.
 """
+            with st.spinner("Enhancing the draft..."):
+                improved = generate_text_with_ai(client, prompt)
 
-            try:
-
-                with st.spinner("Enhancing the draft..."):
-
-                    improved = generate_text_with_ai(client, prompt)
-
+            if improved:
                 st.session_state["enhanced_text"] = improved
-
-            except Exception as error:
-                st.error(f"OpenAI enhancement failed: {error}")
+            else:
+                st.error("OpenAI enhancement failed. The original draft is unchanged.")
 
         if "enhanced_text" in st.session_state:
-
             st.text_area(
                 "OpenAI-enhanced draft",
                 value=st.session_state["enhanced_text"],
-                height=280
+                height=280,
+                key="enhanced_draft_display"
             )
 
+        # Actual image generation is optional and separate from analysis.
         st.divider()
         st.subheader("Optional Image Generation")
 
@@ -1869,35 +1630,25 @@ Return the improved content only.
         )
 
         if st.button("Generate Actual Image"):
-
             if client is None:
                 st.warning("OpenAI is not configured.")
-
             else:
-
                 try:
-
                     with st.spinner("Generating image..."):
-
                         image_bytes = generate_actual_image(
                             client, image_prompt
                         )
-
                     st.session_state["hpu_image"] = image_bytes
-
                 except Exception as error:
                     st.error(f"Image generation failed: {error}")
 
         if "hpu_image" in st.session_state:
-
             image_bytes = st.session_state["hpu_image"]
-
             st.image(
                 image_bytes,
                 caption="Generated HPU image",
                 use_container_width=True
             )
-
             st.download_button(
                 "Download Image",
                 data=image_bytes,
@@ -1906,7 +1657,6 @@ Return the improved content only.
             )
 
             if st.button("Save Image to Database"):
-
                 save_asset(
                     st.session_state["active_source_id"],
                     "Visual",
@@ -1915,9 +1665,9 @@ Return the improved content only.
                     image_bytes,
                     "hpu_visual.png"
                 )
-
                 st.success("Image saved.")
 
+        # Actual audio generation is optional and separate from analysis.
         st.divider()
         st.subheader("Optional Audio Generation")
 
@@ -1940,29 +1690,20 @@ Return the improved content only.
         )
 
         if st.button("Generate Audio"):
-
             if client is None:
                 st.warning("OpenAI is not configured.")
-
             else:
-
                 try:
-
                     with st.spinner("Generating audio..."):
-
                         audio_bytes = generate_actual_audio(
                             client, narration, voice
                         )
-
                     st.session_state["hpu_audio"] = audio_bytes
-
                 except Exception as error:
                     st.error(f"Audio generation failed: {error}")
 
         if "hpu_audio" in st.session_state:
-
             audio_bytes = st.session_state["hpu_audio"]
-
             st.audio(audio_bytes, format="audio/mp3")
 
             st.download_button(
@@ -1973,7 +1714,6 @@ Return the improved content only.
             )
 
             if st.button("Save Audio to Database"):
-
                 save_asset(
                     st.session_state["active_source_id"],
                     "Audio",
@@ -1982,16 +1722,14 @@ Return the improved content only.
                     audio_bytes,
                     "hpu_audio.mp3"
                 )
-
                 st.success("Audio saved.")
 
 
 # ============================================================
-# 11. SOURCE LIBRARY
+# 13. SOURCE LIBRARY
 # ============================================================
 
 def render_source_library():
-
     st.title("Source Knowledge Library")
 
     sources = read_table("source_materials")
@@ -1999,7 +1737,6 @@ def render_source_library():
     if sources.empty:
         st.info("No source materials saved yet.")
     else:
-
         st.dataframe(
             sources,
             use_container_width=True,
@@ -2030,12 +1767,10 @@ def render_source_library():
     if assets.empty:
         st.info("No generated assets saved yet.")
     else:
-
         display = assets.drop(
             columns=["file_data"],
             errors="ignore"
         )
-
         st.dataframe(
             display,
             use_container_width=True,
@@ -2046,7 +1781,6 @@ def render_source_library():
             "Open generated asset",
             assets["id"].tolist()
         )
-
         asset = assets[
             assets["id"] == asset_id
         ].iloc[0]
@@ -2062,12 +1796,10 @@ def render_source_library():
             )
 
         if asset["file_data"] is not None:
-
             raw = bytes(asset["file_data"])
 
             if asset["asset_type"] == "Visual":
                 st.image(raw, use_container_width=True)
-
             elif asset["asset_type"] == "Audio":
                 st.audio(raw, format="audio/mp3")
 
@@ -2079,35 +1811,40 @@ def render_source_library():
                     key=f"asset_download_{asset_id}"
                 )
 
+        status_options = [
+            "Draft", "Under Review", "Approved", "Rejected"
+        ]
+        current_status = (
+            asset["status"]
+            if asset["status"] in status_options
+            else "Draft"
+        )
+
         new_status = st.selectbox(
             "Review status",
-            ["Draft", "Under Review", "Approved", "Rejected"],
+            status_options,
+            index=status_options.index(current_status),
             key=f"asset_status_{asset_id}"
         )
 
         if st.button("Update Asset Status"):
-
             with connect_db() as conn:
-
                 conn.execute(
                     "UPDATE generated_assets SET status=? WHERE id=?",
                     (new_status, int(asset_id))
                 )
-
             st.success("Status updated.")
             st.rerun()
 
 
 # ============================================================
-# 12. PUBLISHING PLANNER
+# 14. PUBLISHING PLANNER
 # ============================================================
 
 def render_publishing_planner():
-
     st.title("Publishing Planner")
 
     with st.form("publishing_form"):
-
         title = st.text_input("Content title")
 
         audience = st.selectbox(
@@ -2136,7 +1873,10 @@ def render_publishing_planner():
 
         status = st.selectbox(
             "Status",
-            ["Idea", "Draft", "Under Review", "Approved", "Scheduled", "Published"]
+            [
+                "Idea", "Draft", "Under Review",
+                "Approved", "Scheduled", "Published"
+            ]
         )
 
         publish_date = st.date_input(
@@ -2147,14 +1887,10 @@ def render_publishing_planner():
         submitted = st.form_submit_button("Add to Planner")
 
     if submitted:
-
         if not title.strip():
             st.warning("Enter a content title.")
-
         else:
-
             with connect_db() as conn:
-
                 conn.execute("""
                     INSERT INTO content
                     (title, audience, platform, content_type,
@@ -2174,13 +1910,11 @@ def render_publishing_planner():
             st.rerun()
 
     st.divider()
-
     content = read_table("content")
 
     if content.empty:
         st.info("No content scheduled yet.")
     else:
-
         st.dataframe(
             content.sort_values("publish_date"),
             use_container_width=True,
@@ -2198,13 +1932,14 @@ def render_publishing_planner():
 
         new_status = st.selectbox(
             "New status",
-            ["Idea", "Draft", "Under Review", "Approved", "Scheduled", "Published"]
+            [
+                "Idea", "Draft", "Under Review",
+                "Approved", "Scheduled", "Published"
+            ]
         )
 
         if st.button("Update Publication Status"):
-
             with connect_db() as conn:
-
                 conn.execute(
                     "UPDATE content SET status=? WHERE id=?",
                     (new_status, int(selected))
@@ -2215,18 +1950,15 @@ def render_publishing_planner():
 
 
 # ============================================================
-# 13. PERFORMANCE ANALYTICS
+# 15. PERFORMANCE ANALYTICS
 # ============================================================
 
 def render_performance():
-
     st.title("Content Performance Analytics")
 
     content = read_table("content")
-    performance = read_table("performance")
 
     if content.empty:
-
         st.info("Add content to the publishing planner first.")
         return
 
@@ -2235,12 +1967,10 @@ def render_performance():
     ]
 
     if published.empty:
-
         st.info("No published content records yet.")
         return
 
     with st.form("performance_form"):
-
         selected = st.selectbox(
             "Published content",
             published["id"].tolist(),
@@ -2258,9 +1988,7 @@ def render_performance():
         submitted = st.form_submit_button("Save Performance")
 
     if submitted:
-
         with connect_db() as conn:
-
             conn.execute("""
                 INSERT INTO performance
                 (content_id, views, likes, comments, shares)
@@ -2279,14 +2007,12 @@ def render_performance():
     performance = read_table("performance")
 
     if not performance.empty:
-
         views_total = int(performance["views"].fillna(0).sum())
         likes_total = int(performance["likes"].fillna(0).sum())
         comments_total = int(performance["comments"].fillna(0).sum())
         shares_total = int(performance["shares"].fillna(0).sum())
 
         a, b, c, d = st.columns(4)
-
         a.metric("Total Views", f"{views_total:,}")
         b.metric("Total Likes", f"{likes_total:,}")
         c.metric("Comments", f"{comments_total:,}")
@@ -2300,15 +2026,13 @@ def render_performance():
 
 
 # ============================================================
-# 14. SYSTEM STATUS
+# 16. SYSTEM STATUS
 # ============================================================
 
 def render_system_status():
-
     st.title("HPU System Status")
 
     st.subheader("Independent HPU Core")
-
     st.success("Local analysis engine available.")
     st.success("Local content templates available.")
     st.success("SQLite database initialised.")
@@ -2322,11 +2046,8 @@ def render_system_status():
     st.subheader("Optional OpenAI Connection")
 
     if get_openai_client():
-
         st.success("OpenAI API key is configured.")
-
     else:
-
         st.info(
             "OpenAI is not configured. HPU Core remains available."
         )
@@ -2335,7 +2056,6 @@ def render_system_status():
     st.subheader("Database Tables")
 
     with connect_db() as conn:
-
         tables = conn.execute("""
             SELECT name
             FROM sqlite_master
@@ -2347,7 +2067,6 @@ def render_system_status():
         st.write("•", table[0])
 
     st.divider()
-
     st.warning(
         "For long-term production use, move the SQLite database "
         "to persistent external storage and maintain backups. "
@@ -2357,46 +2076,45 @@ def render_system_status():
 
 
 # ============================================================
-# 15. METHODOLOGY
+# 17. METHODOLOGY
 # ============================================================
 
 def render_methodology():
-
     st.title("HPU Methodology and Architecture")
 
     st.markdown("""
-    ### 1. Knowledge Input
+### 1. Knowledge Input
 
-    Professional experiences, CV information, interviews,
-    original posts, articles and research material.
+Professional experiences, CV information, interviews,
+original posts, articles and research material.
 
-    ### 2. Independent HPU Core
+### 2. Independent HPU Core
 
-    - Expertise classification.
-    - Strategic theme detection.
-    - Objective assessment.
-    - Measurement and baseline checks.
-    - Evidence identification.
-    - Information-gap recommendations.
+- Expertise classification.
+- Strategic theme detection.
+- Objective assessment.
+- Measurement and baseline checks.
+- Evidence identification.
+- Information-gap recommendations.
 
-    ### 3. Content Development
+### 3. Content Development
 
-    - LinkedIn posts.
-    - Professional articles.
-    - Visual content briefs.
-    - Audio narration scripts.
-    - Publishing plans.
+- LinkedIn posts.
+- Professional articles.
+- Visual content briefs.
+- Audio narration scripts.
+- Publishing plans.
 
-    ### 4. Optional AI Enhancement
+### 4. Optional AI Enhancement
 
-    OpenAI can improve selected writing tasks and generate
-    actual images or audio. It is not required for HPU Core.
+OpenAI can improve selected writing tasks and generate
+actual images or audio. It is not required for HPU Core.
 
-    ### 5. Measurement and Improvement
+### 5. Measurement and Improvement
 
-    Publishing records, performance indicators and feedback
-    support future strategic decisions.
-    """)
+Publishing records, performance indicators and feedback
+support future strategic decisions.
+""")
 
     st.warning(
         "The current local engine uses transparent rules and templates. "
@@ -2406,11 +2124,10 @@ def render_methodology():
 
 
 # ============================================================
-# 16. MAIN APPLICATION NAVIGATION
+# 18. MAIN APPLICATION NAVIGATION
 # ============================================================
 
 def main():
-
     st.sidebar.title("⚙️ HPU")
     st.sidebar.caption("HUMAN PROCESSING UNIT")
     st.sidebar.divider()
@@ -2432,51 +2149,40 @@ def main():
     )
 
     st.sidebar.divider()
-
     st.sidebar.caption("Independent HPU Core")
     st.sidebar.caption("Optional AI Enhancement")
     st.sidebar.caption("Professional Knowledge Database")
     st.sidebar.caption("Content Development and Measurement")
-
     st.sidebar.divider()
     st.sidebar.caption("Dr. Alaa Zahran | HPU Pilot")
 
     if page == "Executive Dashboard":
         render_dashboard()
-
     elif page == "CV Knowledge Base":
         render_cv_knowledge()
-
     elif page == "Professional Experiences":
         render_experiences()
-
     elif page == "Interview Capture":
         render_interviews()
-
     elif page == "Content Intelligence Studio":
         render_content_studio()
-
     elif page == "Source Knowledge Library":
         render_source_library()
-
     elif page == "Publishing Planner":
         render_publishing_planner()
-
     elif page == "Performance Analytics":
         render_performance()
-
     elif page == "HPU Methodology":
         render_methodology()
-
     elif page == "System Status":
         render_system_status()
 
     st.divider()
-
     st.caption(
         "HPU | Human Processing Unit | Dr. Alaa Zahran | "
         "Personal Brand Intelligence"
     )
 
 
-main()
+if __name__ == "__main__":
+    main()
