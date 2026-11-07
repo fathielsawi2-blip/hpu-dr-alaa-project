@@ -1561,40 +1561,117 @@ def render_content_studio():
         return
 
     analysis = st.session_state["active_analysis"]
-st.subheader("Hybrid Intelligence Analysis")
 
-engine_status = analysis.get(
-    "engine_status",
-    "HPU Core"
-)
+    st.subheader("Hybrid Intelligence Analysis")
 
-if engine_status == "Combined HPU + AI":
-    st.success("Both analytical engines completed successfully.")
+    engine_status = analysis.get("engine_status", "HPU Core")
 
-elif engine_status == "HPU-only fallback":
-    st.warning("AI unavailable. HPU Core provided the analysis.")
+    if engine_status == "Combined HPU + AI":
+        st.success("Both analytical engines completed successfully.")
 
-elif engine_status == "AI-only fallback":
-    st.warning("HPU Core unavailable. AI provided the analysis.")
+    elif engine_status == "HPU-only fallback":
+        st.warning("AI unavailable. HPU Core provided the analysis.")
 
-else:
-    st.error("Both engines encountered an issue. Safe fallback active.")
+    elif engine_status == "AI-only fallback":
+        st.warning("HPU Core unavailable. AI provided the analysis.")
 
-col1, col2 = st.columns(2)
+    else:
+        st.error("Both engines encountered an issue. Safe fallback active.")
 
-with col1:
-    st.write("**HPU Core**")
-    st.write(
-        "Available" if analysis.get("hpu_available")
-        else "Unavailable"
-    )
+    # ENGINE STATUS
+    col1, col2 = st.columns(2)
 
-with col2:
-    st.write("**AI Engine**")
-    st.write(
-        "Available" if analysis.get("ai_available")
-        else "Unavailable"
-    )
+    with col1:
+        st.write("**HPU Core Engine**")
+        if analysis.get("hpu_available"):
+            st.success("Available")
+        else:
+            st.error("Unavailable")
+
+    with col2:
+        st.write("**AI Analytical Engine**")
+        if analysis.get("ai_available"):
+            st.success("Available")
+        else:
+            st.warning("Unavailable")
+
+    # HPU CORE FINDINGS
+    st.divider()
+    st.subheader("HPU Core Findings")
+
+    st.write("**Detected expertise:**")
+    st.write(analysis.get("main_theme", "Not identified"))
+
+    st.write("**Strategic observation:**")
+    st.write(analysis.get("strategic_observation", "Not available"))
+
+    st.write("**Objective check:**")
+    st.write(analysis.get("objective_check", "Not assessed"))
+
+    st.write("**Measurement check:**")
+    st.write(analysis.get("measurement_check", "Not assessed"))
+
+    st.write("**Evidence check:**")
+    st.write(analysis.get("evidence_check", "Not assessed"))
+
+    # HPU RECOMMENDATIONS
+    st.subheader("HPU Recommendations")
+
+    for item in analysis.get("recommendations", []):
+        st.write("•", item)
+
+    # AI ANALYSIS
+    if analysis.get("ai_available"):
+
+        st.divider()
+        st.subheader("AI Contextual Interpretation")
+
+        st.write(
+            analysis.get("ai_insights", "No contextual insight available.")
+        )
+
+        st.write("**AI Strategic Theme:**")
+        st.write(analysis.get("ai_theme", "Not identified"))
+
+        st.subheader("AI Content Opportunities")
+
+        for item in analysis.get("ai_opportunities", []):
+            st.write("•", item)
+
+        st.subheader("AI Strategic Recommendations")
+
+        for item in analysis.get("ai_recommendations", []):
+            st.write("•", item)
+
+        st.subheader("Information Requiring Verification")
+
+        for item in analysis.get("missing_information", []):
+            st.write("•", item)
+
+    # ENGINE COMPARISON
+    if analysis.get("comparison"):
+
+        st.divider()
+        st.subheader("Engine Comparison")
+
+        st.json(analysis["comparison"])
+
+    # SOURCE DATA
+    if analysis.get("numbers_in_source"):
+
+        st.write(
+            "**Numbers detected in source:**",
+            ", ".join(
+                str(number)
+                for number in analysis["numbers_in_source"]
+            )
+        )
+
+    # DIAGNOSTICS
+    with st.expander("Engine diagnostics"):
+
+        st.write("HPU error:", analysis.get("hpu_error"))
+        st.write("AI error:", analysis.get("ai_error"))
 
 st.divider()
 
