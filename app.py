@@ -1533,16 +1533,14 @@ def render_content_studio():
             )
 
             
-with st.spinner("HPU and AI engines are analysing the source..."):
+            with st.spinner("HPU and AI engines are analysing the source..."):
+                analysis, engine_status = run_hybrid_analysis(
+                    source_text,
+                    objective,
+                    audience
+                )
 
-    analysis, engine_status = run_hybrid_analysis(
-        source_text,
-        objective,
-        audience
-    )
-
-save_analysis(source_id, analysis, engine_status)
-
+            save_analysis(source_id, analysis, engine_status)
 
             st.session_state["active_source_id"] = source_id
             st.session_state["active_source_text"] = source_text
@@ -1563,8 +1561,6 @@ save_analysis(source_id, analysis, engine_status)
         return
 
     analysis = st.session_state["active_analysis"]
-
-    
 st.subheader("Hybrid Intelligence Analysis")
 
 engine_status = analysis.get(
